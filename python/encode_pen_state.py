@@ -2,7 +2,7 @@ import numpy as np
 
 def encode_pen_state(sketch):
     """
-    One-hot encode pen state by adding addition columns for pen up and end of stroke.
+    One-hot encode pen state by adding additional columns for pen up and end of stroke.
     
     Parameters: 
         sketch (ndarray): n*3 array with format (x,y,p1), representing sketch data
@@ -16,6 +16,7 @@ def encode_pen_state(sketch):
     pen_up = (np.ones(shape[0]) - sketch[:,2]).reshape(shape[0],1)
     end_stroke = np.zeros((shape[0],1))
     end_stroke[-1] = 1 
+    sketch[-1][2] = 0
     
     return np.concatenate((sketch,pen_up,end_stroke),axis=1)
 
@@ -51,3 +52,4 @@ def encode_dataset2(data):
     for i, sketch in enumerate(data):
         data[i] = encode_pen_state(sketch) 
     return
+
