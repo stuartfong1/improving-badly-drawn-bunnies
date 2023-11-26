@@ -1,9 +1,7 @@
 import numpy as np
 
-# Get file path for one class of sketches
 data_path = '/kaggle/input/tinyquickdraw/sketches/sketches/whale.npz'
 
-# Load from file
 dataset = np.load(data_path, encoding='latin1', allow_pickle=True)
 data = dataset["train"]
 
@@ -22,7 +20,7 @@ def normalize_data():
         coordinate_list[i:i+len(element),:] = element[:,0:2] 
         i+=len(element)
 
-    data_std = np.std(coordinate_list) # calculates standard deviation
+    data_std = np.std(coordinate_list) 
     
     for i, element in enumerate(data):
         data[i] = data[i].astype(np.float32)
