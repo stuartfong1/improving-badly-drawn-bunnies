@@ -1,7 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import norm
-import statistics
 import math
 
 # Get file path for one class of sketches
@@ -20,8 +19,8 @@ plt.hist(data_val, bins=25, density=True, alpha=0.6, color='b') # graph a histog
 
 plt.show()
 
-mean = statistics.mean(data_val)
-sd = statistics.stdev(data_val)
+mean = np.mean(data_val)
+sd = np.std(data_val)
 
 plt.plot(data_val, norm.pdf(data_val, mean, sd)) # pdf is probability, density function
 plt.show()
