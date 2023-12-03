@@ -33,26 +33,30 @@ def distribution(decoder_output):
     """
     # Split the decoder output into 
     # [pi, mean_x, mean_y, std_x, std_y, rho_xy] and [q1,q2,q3]
-    parameters = torch.split(decoder_output, 6, 1)
+    parameters = torch.split(decoder_output, 6, 2)
 
     # Chunk the parameters together, then stack them 
     # so that each column defines a distribution
-    mixture_parameters = torch.stack(parameters[:-1])
+    mixture_parameters = torch.stack(parameters[:-1],1)
 
     # Split mixture parameters into each parameter
-    mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy = torch.split(mixture_parameters, 1, 2)
+    mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy = torch.split(mixture_parameters, 1, 3)
 
     # The 3 leftover parameters are for the pen state
     pen_state = parameters[-1]
 
-    mixture_weights = F.softmax(mixture_weights/T)  # Each weight must be in [0, 1] and all must sum to 1
-    std_x = std_x.exp(std_x)*sqrtT  # Standard deviation must be positive
-    std_y = std_y.exp(std_x)*sqrtT  # Standard deviation must be positive
+    mixture_weights = F.softmax(mixture_weights/T,dim=3)  # Each weight must be in [0, 1] and all must sum to 1
+    std_x = torch.exp(std_x)*sqrtT  # Standard deviation must be positive
+    std_y = torch.exp(std_x)*sqrtT  # Standard deviation must be positive
     corr_xy = F.tanh(corr_xy)  # Correlation coefficient must be in [-1, 1]
-    pen_state = F.softmax(pen_state/T)  # Each probability must be in [0, 1] and all must sum to 1
+    pen_state = F.softmax(pen_state/T,dim=2)  # Each probability must be in [0, 1] and all must sum to 1
 
 
     return mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy, pen_state
+
+# this is a placeholder function for the gaussian mixture model
+def sample(x):
+    return torch.tensor([0,0,1,0,0])
 
 class Decoder(nn.Module):
     def __init__(self):
@@ -69,17 +73,18 @@ class Decoder(nn.Module):
         self.lstm = nn.LSTM(input_dim,hidden_dim)
 
         # We can adjust dimensions of these
-        self.hidden_cell = (torch.zeros(1,batch_size,hidden_dim),
-                            torch.zeros(1,batch_size,hidden_dim))
+        self.hidden_cell = (torch.zeros(1,128,hidden_dim),
+                            torch.zeros(1,128,hidden_dim))
 
     def forward(self, z): 
         # Batch samples from latent space distributions
         z = z.view(batch_size,latent_dim)
         
         # Obtain initial hidden and cell states by splitting result of fc_in along column axis
-        self.hidden_cell = torch.split(F.tanh(self.fc_in(z)), 
+        
+        self.hidden_cell = torch.split(F.tanh(self.fc_in(z).view(1,latent_dim,2*hidden_dim)), 
                                        [hidden_dim, hidden_dim], 
-                                       dim = 1)
+                                       dim = 2)
 
         # Data for all strokes in output sequence
         strokes = torch.zeros(N_max + 1, batch_size, stroke_dim)
@@ -89,14 +94,21 @@ class Decoder(nn.Module):
         # the output.  Output of the previous timestep is used as input.
         for i in range(0,N_max):
 
-            x = torch.cat((z,strokes[i,:,:]),dim = 1)
+            x = torch.cat((z,strokes[i,:,:]),dim = 1).view(1,batch_size,input_dim)
 
             out, self.hidden_cell = self.lstm(x,self.hidden_cell)
 
             # Sample from output distribution. If temperature parameter is small,
             # this becomes deterministic.
-            params = distribution(self.fc_proj(out),T)
-            strokes[i+1] = sample(params);
+            params = distribution(self.fc_proj(out))
+            strokes[i+1] = sample(params)
             
         return strokes[1:,:,:] #ignore first stroke
     
+decoder = Decoder()
+
+z = torch.ones(batch_size,latent_dim)
+
+print('passing vector')
+out = decoder.forward(z)
+print('done!')
