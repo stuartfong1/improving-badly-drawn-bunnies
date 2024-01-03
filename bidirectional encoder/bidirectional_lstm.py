@@ -60,37 +60,52 @@ for i in range(10):
     
 lr = 2e-3
 hidden_dim = 128
-# TODO: Get the model to train w/ data + display results
-# A successful model should be able to take in an image and output a matrix for the hidden state + cell state.
 
-class Model(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.lstm = nn.LSTM(5, hidden_dim, bidirectional=True)
+class Encoder(nn.Module):
+    def __init__(self, input_size):
+        super(Encoder, self).__init__() 
+
         
-        # The activation function
-        self.fc = nn.Linear(hidden_dim, 5) 
-
-        # the short term memory of the LSTM
-        # starts in a state of all 0's - tuple of 2 three dimensional arrays
-        self.hidden_cell = (torch.zeros(1, 1, hidden_dim),
-                            torch.zeros(1, 1, hidden_dim)) 
+        self.fc1 = nn.Linear(input_size, 128) 
+        self.fc2 = nn.Linear(128, 64)
+        self.fc3 = nn.Linear(64, 64)
+        self.fc4 = nn.Linear(64, 32)
+        self.fc5 = nn.Linear(32, hidden_dim*2)
         
     def forward(self, x):
-        # changes x to a c x 5 tensor (c being some integer we don't know)
-        # also ensures out data matches our LSTM's requirements
-        x = x.view(-1, 5)
+        x = self.fc1(x)
+        x = F.relu(x)
+        x = self.fc2(x)
+        x = F.relu(x)
+        x = self.fc3(x)
+        x = F.relu(x)
+        x = self.fc4(x)
+        x = F.relu(x)
+        x = self.fc5(x)
         
-        # updating hidden cell and passing input along
-        x, self.hidden_cell = self.lstm(x, self.hidden_cell) 
+        print(x)
         
-        # self.fc() describes a layer
-        # this flattens x, feeds it into a fully connected layer, and gets x as the output
-        x = self.fc(x.view(len(x), -1)) 
+        mean_logvar = x.view(-1, 2, latent_dim)
+        mean = mean_logvar[:, 0, :]
+        logvar = mean_logvar[:, 1, :]
         
-        # get the final output of feeding x into the model
-        return x[-1] 
+        return mean, logvar
     
-model = Model()
 
-optimizer = Adam(model.parameters(), lr=lr)
+def train():
+    cur_step = 0
+    total_loss = 0
+        
+    for _ in range(n_epochs):
+        for image in data:
+            print(np.shape(image)[0])
+            encoder = Encoder(np.shape(image)[0])
+            mean, logvar = encoder(torch.from_numpy(image))
+            
+            cur_step += 1
+
+        print(f"Mean: {mean} Logvar: {logvar}")
+        total_loss = 0
+        cur_step = 0
+
+train()
