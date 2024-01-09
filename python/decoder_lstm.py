@@ -3,6 +3,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from math import sqrt
+import gaussian_mixture_model as GMM
 
 M = 10 # number of normal distributions for output 
 T = 0.5 # temperature parameter
@@ -16,7 +17,6 @@ stroke_dim = 5
 input_dim = latent_dim + stroke_dim # + 5 for size of stroke data: (x,y,p1,p2,p3)
 
 output_dim = 6*M + 3
-
 
 def distribution(decoder_output):
     """
@@ -47,16 +47,15 @@ def distribution(decoder_output):
 
     mixture_weights = F.softmax(mixture_weights/T,dim=3)  # Each weight must be in [0, 1] and all must sum to 1
     std_x = torch.exp(std_x)*sqrtT  # Standard deviation must be positive
-    std_y = torch.exp(std_x)*sqrtT  # Standard deviation must be positive
+    std_y = torch.exp(std_y)*sqrtT  # Standard deviation must be positive
     corr_xy = F.tanh(corr_xy)  # Correlation coefficient must be in [-1, 1]
     pen_state = F.softmax(pen_state/T,dim=2)  # Each probability must be in [0, 1] and all must sum to 1
-
 
     return mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy, pen_state
 
 # this is a placeholder function for the gaussian mixture model
-def sample(x):
-    return torch.tensor([0,0,1,0,0])
+def GMM_placeholder():
+    return torch.tensor([6,9]).repeat(batch_size,1)
 
 class Decoder(nn.Module):
     def __init__(self):
@@ -72,9 +71,9 @@ class Decoder(nn.Module):
         # Input has dimension latent_dim + 5 for latent vector and initial stroke
         self.lstm = nn.LSTM(input_dim,hidden_dim)
 
-        # We can adjust dimensions of these
-        self.hidden_cell = (torch.zeros(1,128,hidden_dim),
-                            torch.zeros(1,128,hidden_dim))
+        # We can adjust dimensions of these as we see fit
+        self.hidden_cell = (torch.zeros(1,batch_size,hidden_dim),
+                            torch.zeros(1,batch_size,hidden_dim))
 
     def forward(self, z): 
         # Batch samples from latent space distributions
@@ -88,7 +87,7 @@ class Decoder(nn.Module):
 
         # Data for all strokes in output sequence
         strokes = torch.zeros(N_max + 1, batch_size, stroke_dim)
-        strokes[:,0] = torch.tensor([0,0,1,0,0])
+        strokes[0,:] = torch.tensor([0,0,1,0,0])
   
         # For each timestep, pass the batch of strokes through LSTM cell and compute 
         # the output.  Output of the previous timestep is used as input.
@@ -100,15 +99,27 @@ class Decoder(nn.Module):
 
             # Sample from output distribution. If temperature parameter is small,
             # this becomes deterministic.
-            params = distribution(self.fc_proj(out))
-            strokes[i+1] = sample(params)
+            mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy, pen_state = distribution(self.fc_proj(out))
+            pen_state = pen_state.view(batch_size,3)
+            # Like this for now for testing
+            sample = GMM_placeholder()#GMM.gaussian_mixture_model(mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy)
+            strokes[i+1] = torch.cat((sample,pen_state),dim=1)
             
         return strokes[1:,:,:] #ignore first stroke
     
-decoder = Decoder()
 
-z = torch.ones(batch_size,latent_dim)
+def main():
+    print("Running tests...\n")
 
-print('passing vector')
-out = decoder.forward(z)
-print('done!')
+def dim_test(decoder):
+    z = torch.ones(batch_size,latent_dim) 
+    out = decoder.forward(z)
+    print('Dimension test passed ✅\n')
+    print("Output (first sketch in batch):\n")
+    print(out[0])
+
+if __name__ == "__main__":
+    main()
+    decoder = Decoder()
+    print("Decoder successfully initialiazed ✅\n")
+    dim_test(decoder)
