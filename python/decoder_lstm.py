@@ -3,7 +3,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from math import sqrt
-import gaussian_mixture_model as GMM
+from gaussian_mixture_model import sample
 
 M = 10 # number of normal distributions for output 
 T = 0.5 # temperature parameter
@@ -53,9 +53,9 @@ def distribution(decoder_output):
 
     return mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy, pen_state
 
-# this is a placeholder function for the gaussian mixture model
-def GMM_placeholder():
-    return torch.tensor([6,9]).repeat(batch_size,1)
+# # this is a placeholder function for the gaussian mixture model
+# def GMM_placeholder():
+#     return torch.tensor([6,9]).repeat(batch_size,1)
 
 class Decoder(nn.Module):
     def __init__(self):
@@ -99,11 +99,13 @@ class Decoder(nn.Module):
 
             # Sample from output distribution. If temperature parameter is small,
             # this becomes deterministic.
-            mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy, pen_state = distribution(self.fc_proj(out))
-            pen_state = pen_state.view(batch_size,3)
+            # mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy, pen_state = distribution(self.fc_proj(out))
+            # pen_state = pen_state.view(batch_size,3)
+            params = distribution(self.fc_proj(out))
             # Like this for now for testing
-            sample = GMM_placeholder()#GMM.gaussian_mixture_model(mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy)
-            strokes[i+1] = torch.cat((sample,pen_state),dim=1)
+            # sample = GMM_placeholder()#GMM.gaussian_mixture_model(mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy)
+            # strokes[i+1] = torch.cat((sample,pen_state),dim=1)
+            strokes[i+1] = sample(*params)
             
         return strokes[1:,:,:] #ignore first stroke
     
