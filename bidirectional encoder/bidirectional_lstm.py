@@ -11,9 +11,9 @@ import seaborn as sns
 
 
 # Get file path for one class of sketches
-data_path = '/kaggle/input/tinyquickdraw/sketches/sketches/whale.npz'
+# data_path = '/kaggle/input/tinyquickdraw/sketches/sketches/whale.npz'
 #for debugging purposes, comment the above line and decomment the below line
-# data_path = 'ambulance.npz'
+data_path = 'ambulance.npz'
 
 
 # Load from file
@@ -31,10 +31,10 @@ class Encoder(nn.Module):
     def __init__(self, feature_number=num_features):
         super(Encoder, self).__init__()
         self.lstm = nn.LSTM(feature_number, hidden_dim, bidirectional=True)
-        # self.fc_mu = nn.Linear(2*hidden_dim, latent_dim)
-        # self.fc_logvar = nn.Linear(2*hidden_dim, latent_dim)
         self.fc_1 = nn.Linear(2*hidden_dim, 512)
-        self.fc_2 = nn.Linear(512, latent_dim)
+
+        self.fc_mu = nn.Linear(2*hidden_dim, latent_dim)
+        self.fc_sigma = nn.Linear(2*hidden_dim, latent_dim)
 
     def forward(self, x, batch_size):
         """
@@ -48,9 +48,8 @@ class Encoder(nn.Module):
         - batch_size: int representing the current batch size.
 
         Returns:
-        - z: Tensor of shape [batch_size, 2*hidden_dim] representing the latent vector of the batch.
-        - mu: the mean of the distribution of values
-        - logvar: log of the variance of the distribution of values
+        - mu: Tensor of shape [batch_size, 2*hidden dim] representing the mean of the distribution of values
+        - sigma: Tensor of shape [batch_size, 2*hidden dim] representing the log of the distribution of values
         """
 
         # Get the hidden states
@@ -63,10 +62,10 @@ class Encoder(nn.Module):
         # Get the latent vector representation of the data
         hidden_concatenated = self.fc_1(hidden_concatenated)
         hidden_concatenated = F.relu(hidden_concatenated)
-        hidden_concatenated = self.fc_2(hidden_concatenated)
 
-        return hidden_concatenated
-
+        mu = self.fc_mu(hidden_concatenated)
+        sigma = self.fc_sigma(hidden_concatenated)
+        return mu, sigma
 
 encoder = Encoder()
 
