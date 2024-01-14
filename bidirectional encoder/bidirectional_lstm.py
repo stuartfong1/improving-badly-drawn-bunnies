@@ -31,7 +31,6 @@ class Encoder(nn.Module):
     def __init__(self, feature_number=num_features):
         super(Encoder, self).__init__()
         self.lstm = nn.LSTM(feature_number, hidden_dim, bidirectional=True)
-        self.fc_1 = nn.Linear(2*hidden_dim, 512)
 
         self.fc_mu = nn.Linear(2*hidden_dim, latent_dim)
         self.fc_sigma = nn.Linear(2*hidden_dim, latent_dim)
@@ -58,10 +57,6 @@ class Encoder(nn.Module):
         _, (hidden, cell) = self.lstm(x.float(), (hidden, cell))
         hidden_forward_dir, hidden_backward_dir = torch.split(hidden, 1, 0)
         hidden_concatenated = torch.cat([hidden_forward_dir.squeeze(0), hidden_backward_dir.squeeze(0)], 1)
-
-        # Get the latent vector representation of the data
-        hidden_concatenated = self.fc_1(hidden_concatenated)
-        hidden_concatenated = F.relu(hidden_concatenated)
 
         mu = self.fc_mu(hidden_concatenated)
         sigma = self.fc_sigma(hidden_concatenated)
@@ -103,8 +98,9 @@ def train():
     encoder.train() # set it to training mode
 
     batch, lengths = make_batch()
-    latent_vector = encoder(batch, batch_size)
-    print(f"{latent_vector.size()}, {latent_vector}")
+    mean, logvar = encoder(batch, batch_size)
+    print(f" mean: {mean.size()} {mean}")
+    print(f"logvar: {logvar.size()} {logvar}")
 
 
 if __name__ == "__main__":
