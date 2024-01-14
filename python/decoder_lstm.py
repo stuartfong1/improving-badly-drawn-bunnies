@@ -105,7 +105,7 @@ class Decoder(nn.Module):
             # Like this for now for testing
             # sample = GMM_placeholder()#GMM.gaussian_mixture_model(mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy)
             # strokes[i+1] = torch.cat((sample,pen_state),dim=1)
-            strokes[i+1] = sample(*params)
+            strokes[i+1] = sample(batch_size, *params)
             
         return strokes[1:,:,:] #ignore first stroke
     

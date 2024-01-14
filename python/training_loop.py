@@ -12,22 +12,64 @@ import seaborn as sns
 import pandas as pd
 from tqdm.auto import tqdm
 
-from decoder_lstm import Decoder
+# import from other files
+from decoder_lstm import distribution, Decoder
 from displayData import display
 from encode_pen_state import encode_pen_state, encode_dataset1, encode_dataset2
 from gaussian_mixture_model import gaussian_mixture_model, sample
-# from normalize-data import normalize_data (may need to rename file, name is giving errors)
+from normalize_data import normalize_data
 from sample_from_distribution import sample_latent_vector
 from SketchesDataset import SketchesDataset
+from pruning import graph_values, prune_data
 
-# make pruning a method and import it
 # from bidirectional_encoder import Encoder
 
 lr = 2e-3
-batch_size = 128
-latent_dim = 5 # originally 5
+batch_size = 100
+latent_dim = 128 # originally 5
 # this is the # of vector dimensions at the bottleneck
 # at the latent space, we represent each image using a vector with latent_dim dimensions
 # check 11/12/2023 Slides for the encoder-decoder model
 n_epochs = 20
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+# Get file path for one class of sketches
+data_path = '/kaggle/input/tinyquickdraw/sketches/sketches/whale.npz'
+
+# Load from file
+dataset = np.load(data_path, encoding='latin1', allow_pickle=True)
+data = dataset["train"]
+
+class VAE(nn.Module):
+    def __init__(self):
+        super(VAE, self).__init__()
+        #self.encoder = Encoder(5)
+        self.decoder = Decoder()
+
+
+    def forward(self, x):
+        # mean, logvar = self.encoder(x)
+
+
+        sample = torch.randn(batch_size, latent_dim)
+        # std = torch.exp(logvar)
+        # z = mean + std*sample
+
+        # x = self.decoder(z)
+        # return x, mean, logvar
+
+
+model = VAE()
+# optimizer = Adam(model.parameters(), lr = lr)
+
+
+def train():
+    dataloader = DataLoader(data, batch_size=batch_size, shuffle=True)
+    cur_step = 0
+    total_loss = 0
+    for _ in range(n_epochs):
+        for image, _ in tqdm(dataloader):
+            # Run predictions
+            output, mean, logvar = model(image)
+
+if __name__ == "__main__":
+    pass
