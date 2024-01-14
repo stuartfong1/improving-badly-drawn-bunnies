@@ -12,6 +12,9 @@ import seaborn as sns
 
 # Get file path for one class of sketches
 data_path = '/kaggle/input/tinyquickdraw/sketches/sketches/whale.npz'
+#for debugging purposes, comment the above line and decomment the below line
+# data_path = 'ambulance.npz'
+
 
 # Load from file
 dataset = np.load(data_path, encoding='latin1', allow_pickle=True)
