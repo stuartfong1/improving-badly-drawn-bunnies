@@ -4,10 +4,11 @@ from scipy.stats import norm
 import math
 import torch
 from torch import nn
+import torch.nn.functional as F
 from torch.optim import Adam
 from sklearn.preprocessing import MinMaxScaler
 import seaborn as sns
-# Birdirectional Encoder starts at line 62.
+
 
 # Get file path for one class of sketches
 data_path = '/kaggle/input/tinyquickdraw/sketches/sketches/whale.npz'
@@ -16,96 +17,99 @@ data_path = '/kaggle/input/tinyquickdraw/sketches/sketches/whale.npz'
 dataset = np.load(data_path, encoding='latin1', allow_pickle=True)
 data = dataset["train"]
 
-data_val = np.zeros(0)
-for i in data:
-    data_val = np.append(data_val, [len(i)])
-
-plt.hist(data_val, bins=25, density=True, alpha=0.6, color='b') # graph a histogram of our values
-
-plt.show()
-
-mean = np.mean(data_val)
-sd = np.std(data_val)
-
-
-plt.plot(data_val, norm.pdf(data_val, mean, sd)) # pdf is probability, density function
-plt.show()
-
-print("Mean: ", mean)
-print("Standard deviation: ", sd)
-
-# get initial # of images
-print(np.size(data))
-
-num_st = 2.5 # should be a value in (0, 3)
-
-lower = math.floor(mean - sd*num_st)  # the lower bound of points allowed
-upper = math.ceil(mean + sd*num_st) # the upper bound of points allowed
-
-i = 0
-while i < np.size(data):
-    num_points = np.shape(data[i])[0] # gets number of points
-    if num_points < lower or num_points > upper:
-        data = np.delete(data, i) # np.delete(array, index) returns the array, minus the object at the index  
-    else:
-        i += 1
-        
-# get final # of images
-print(np.size(data))
-
-# get input dimensions
-for i in range(10):
-    print(np.shape(data[i]))
-    
-    
 lr = 2e-3
-hidden_dim = 128
+hidden_dim = 2048
+latent_dim = 128
+num_features = 3 # will change to 5 with pen state encoding
+batch_size = 100
+Nmax = max([len(i) for i in data])
 
 class Encoder(nn.Module):
-    def __init__(self, input_size):
-        super(Encoder, self).__init__() 
+    def __init__(self, hidden_dim=hidden_dim):
+        super(Encoder, self).__init__()
+        self.lstm = nn.LSTM(num_features, hidden_dim, bidirectional=True)
+        # self.fc_mu = nn.Linear(2*hidden_dim, latent_dim)
+        # self.fc_logvar = nn.Linear(2*hidden_dim, latent_dim)
+        self.fc_1 = nn.Linear(2*hidden_dim, 1024)
+        self.fc_2 = nn.Linear(1024, 512)
+        self.fc_3 = nn.Linear(512, 256)
+        self.fc_4 = nn.Linear(256, latent_dim)
 
-        
-        self.fc1 = nn.Linear(input_size, 128) 
-        self.fc2 = nn.Linear(128, 64)
-        self.fc3 = nn.Linear(64, 64)
-        self.fc4 = nn.Linear(64, 32)
-        self.fc5 = nn.Linear(32, hidden_dim*2)
-        
-    def forward(self, x):
-        x = self.fc1(x)
-        x = F.relu(x)
-        x = self.fc2(x)
-        x = F.relu(x)
-        x = self.fc3(x)
-        x = F.relu(x)
-        x = self.fc4(x)
-        x = F.relu(x)
-        x = self.fc5(x)
-        
-        print(x)
-        
-        mean_logvar = x.view(-1, 2, latent_dim)
-        mean = mean_logvar[:, 0, :]
-        logvar = mean_logvar[:, 1, :]
-        
-        return mean, logvar
-    
+    def forward(self, x, batch_size):
+        """
+        Runs a batch of images through the encoder and returns its latent vector.
+        Does not normalize values on its own.
+
+        Parameters:
+         - x: Tensor of shape [max_strokes, batch_size, num_features]
+            where max_strokes is the highest number of points possible for an image in the batch.
+            x should be normalized.
+        - batch_size: int representing the current batch size.
+
+        Returns:
+        - z: Tensor of shape [batch_size, 2*hidden_dim] representing the latent vector of the batch.
+        - mu: the mean of the distribution of values
+        - logvar: log of the variance of the distribution of values
+        """
+
+        # Get the hidden states
+        hidden, cell = torch.zeros(2, batch_size, hidden_dim), torch.zeros(2, batch_size, hidden_dim)
+
+        _, (hidden, cell) = self.lstm(x.float(), (hidden, cell))
+        hidden_forward_dir, hidden_backward_dir = torch.split(hidden, 1, 0)
+        hidden_concatenated = torch.cat([hidden_forward_dir.squeeze(0), hidden_backward_dir.squeeze(0)], 1)
+
+        # Get the latent vector representation of the data
+        hidden_concatenated = self.fc_1(hidden_concatenated)
+        hidden_concatenated = F.relu(hidden_concatenated)
+        hidden_concatenated = self.fc_2(hidden_concatenated)
+        hidden_concatenated = F.relu(hidden_concatenated)
+        hidden_concatenated = self.fc_3(hidden_concatenated)
+        hidden_concatenated = F.relu(hidden_concatenated)
+        hidden_concatenated = self.fc_4(hidden_concatenated)
+
+        return hidden_concatenated
+
+
+encoder = Encoder()
+
+
+def make_batch(size=batch_size):
+    """
+    Using the data created earlier in the code and a given batch size, randomly fetch
+    that many images and return them + their lengths.
+
+    Parameters:
+        - size: the size of the batch. Default is the variable batch_size declared
+            at the start of the code.
+
+    Returns:
+        - batch: the batch of random images appended in the order they were fetched in.
+        - lengths: the length of each image fetched, in the order they were fetched in.
+    """
+
+    batch_ids = np.random.choice(len(data), batch_size)
+    batch_images = [data[id] for id in batch_ids]
+    lengths = [len(image) for image in batch_images]
+    strokes = []
+    for image in batch_images:
+        new_image = np.zeros((Nmax, num_features))
+
+        # need to change the following when pen state is encoded
+        new_image[:len(image), :] = image[:len(image), :] # copy over values
+        new_image[len(image):, :2] = 1 # set leftover empty coordinates to 1 to indicate end
+
+        strokes.append(new_image)
+    return torch.from_numpy(np.stack(strokes, 1)).float(), lengths
+
 
 def train():
-    cur_step = 0
-    total_loss = 0
-        
-    for _ in range(n_epochs):
-        for image in data:
-            print(np.shape(image)[0])
-            encoder = Encoder(np.shape(image)[0])
-            mean, logvar = encoder(torch.from_numpy(image))
-            
-            cur_step += 1
+    encoder.train() # set it to training mode
 
-        print(f"Mean: {mean} Logvar: {logvar}")
-        total_loss = 0
-        cur_step = 0
+    batch, lengths = make_batch()
+    latent_vector = encoder(batch, batch_size)
+    print(f"{latent_vector.size()}, {latent_vector}")
 
-train()
+
+if __name__ == "__main__":
+    train()
