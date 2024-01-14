@@ -25,15 +25,13 @@ batch_size = 100
 Nmax = max([len(i) for i in data])
 
 class Encoder(nn.Module):
-    def __init__(self, hidden_dim=hidden_dim):
+    def __init__(self, feature_number=num_features):
         super(Encoder, self).__init__()
-        self.lstm = nn.LSTM(num_features, hidden_dim, bidirectional=True)
+        self.lstm = nn.LSTM(feature_number, hidden_dim, bidirectional=True)
         # self.fc_mu = nn.Linear(2*hidden_dim, latent_dim)
         # self.fc_logvar = nn.Linear(2*hidden_dim, latent_dim)
-        self.fc_1 = nn.Linear(2*hidden_dim, 1024)
-        self.fc_2 = nn.Linear(1024, 512)
-        self.fc_3 = nn.Linear(512, 256)
-        self.fc_4 = nn.Linear(256, latent_dim)
+        self.fc_1 = nn.Linear(2*hidden_dim, 512)
+        self.fc_2 = nn.Linear(512, latent_dim)
 
     def forward(self, x, batch_size):
         """
@@ -63,10 +61,6 @@ class Encoder(nn.Module):
         hidden_concatenated = self.fc_1(hidden_concatenated)
         hidden_concatenated = F.relu(hidden_concatenated)
         hidden_concatenated = self.fc_2(hidden_concatenated)
-        hidden_concatenated = F.relu(hidden_concatenated)
-        hidden_concatenated = self.fc_3(hidden_concatenated)
-        hidden_concatenated = F.relu(hidden_concatenated)
-        hidden_concatenated = self.fc_4(hidden_concatenated)
 
         return hidden_concatenated
 
