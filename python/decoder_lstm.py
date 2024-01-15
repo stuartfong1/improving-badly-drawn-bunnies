@@ -2,12 +2,11 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from math import sqrt
-#from gaussian_mixture_model import sample
+from gaussian_mixture_model import sample
 
 M = 10 # number of normal distributions for output 
 T = 0.5 # temperature parameter
 sqrtT = sqrt(T) # 
-
 batch_size = 128
 N_max = 10 # maximum number of strokes for sketch in dataset
 hidden_dim = 2048 # dimension of cell and hidden states
@@ -16,49 +15,6 @@ stroke_dim = 5
 input_dim = latent_dim + stroke_dim # z | (x,y,p1,p2,p3)
 
 output_dim = 6*M + 3
-
-def gaussian_mixture_model(mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy):
-    """
-    Input:
-        mixture_weights: Mixture weights (probability of a point being in distribution i)
-        mean_x: The x-values of the means of each distribution
-        mean_y: The y-values of the means of each distribution
-        std_x: The standard deviations of the x-values
-        std_y: The standard deviations of the y-values
-        corr_xy: The correlation coefficients of the x and y values
-        
-    Return: 
-        The sampled x and y offsets
-    """
-    # Choose which distribution to sample from
-    mixture_weights = mixture_weights.squeeze().transpose(0, 1).contiguous()
-    
-    # Index for each batch
-    i = torch.searchsorted(mixture_weights.cumsum(0), torch.rand(batch_size, 1)).squeeze()
-    
-    # Sample from bivariate normal distribution i
-    rand_x, rand_y = torch.randn(batch_size), torch.randn(batch_size)
-    
-    mean_x = torch.take(mean_x, i)
-    mean_y = torch.take(mean_y, i)
-    std_x = torch.take(std_x, i)
-    std_y = torch.take(std_y, i)
-    corr_xy = torch.take(corr_xy, i)
-    
-    # Alternatively torch.distributions.multivariate_normal.MultivariateNormal?
-    offset_x = mean_x + std_x * rand_x
-    offset_y = mean_y + std_y * (corr_xy * offset_x + torch.sqrt(1 - corr_xy ** 2) * rand_y)
-    return offset_x.unsqueeze(0), offset_y.unsqueeze(0)
-
-def sample(mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy, pen_state):
-    offset_x, offset_y = gaussian_mixture_model(mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy)
-    
-    pen_state = pen_state.squeeze()
-    pen_state = torch.searchsorted(pen_state.cumsum(1), torch.rand(batch_size, 1)).squeeze()
-    next_point = torch.cat((offset_x, offset_y, torch.zeros(3, batch_size)))
-    next_point = torch.cat((offset_x, offset_y, torch.eye(3)[pen_state].transpose(0, 1)))
-    
-    return next_point.transpose(0, 1)
 
 def distribution(decoder_output):
     """
@@ -113,7 +69,7 @@ class Decoder(nn.Module):
         self.hidden_cell = (torch.zeros(1,batch_size,hidden_dim),
                             torch.zeros(1,batch_size,hidden_dim))
     
-    def forward(self, z, N_s): 
+    def forward(self, z, N_s = torch.full((batch_size,1),2**31-1)): 
         """
         Parameters:
             z - Tensor of size  (batch_size, latent_dim), with latent vector samples.
@@ -140,7 +96,6 @@ class Decoder(nn.Module):
         # For each timestep, pass the batch of strokes through LSTM cell and compute 
         # the output.  Output of the previous timestep is used as input.
         for i in range(0,N_max):
-
             x = torch.cat((z,strokes[i,:,:]),dim = 1).view(1,batch_size,input_dim)
 
             out, self.hidden_cell = self.lstm(x,self.hidden_cell)
