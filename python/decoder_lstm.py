@@ -148,7 +148,7 @@ class Decoder(nn.Module):
             # Sample from output distribution. If temperature parameter is small,
             # this becomes deterministic.
             params = distribution(self.fc_proj(out))
-            strokes[i+1] = sample(*params)
+            strokes[i+1] = sample(batch_size, *params)
 
             #for strokes in generated sequence past sequence length, set to [0,0,0,0,1]
             mask = (i > N_s)

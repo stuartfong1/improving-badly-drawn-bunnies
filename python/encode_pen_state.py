@@ -31,7 +31,8 @@ def encode_dataset1(data):
     Returns:
         ndarray: object array containing encoded data for each sketch
     """
-    new_data = np.empty(data.size,dtype=object)
+    # new_data = np.empty(data.size,dtype=object)
+    new_data = np.empty((data.shape[0], data.shape[1], 5), dtype=object)
 
     for i, sketch in enumerate(data):
         new_data[i] = encode_pen_state(sketch) 
