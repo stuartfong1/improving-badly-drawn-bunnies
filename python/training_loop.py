@@ -21,19 +21,17 @@ from normalize_data import normalize_data
 from sample_from_distribution import sample_latent_vector
 from SketchesDataset import SketchesDataset
 from pruning import graph_values, prune_data
+from encoder_lstm import Encoder, make_batch
 
-# from bidirectional_encoder import Encoder
 
 lr = 2e-3
 batch_size = 100
-latent_dim = 128 # originally 5
-# this is the # of vector dimensions at the bottleneck
-# at the latent space, we represent each image using a vector with latent_dim dimensions
-# check 11/12/2023 Slides for the encoder-decoder model
+latent_dim = 128
 n_epochs = 20
 
 # Get file path for one class of sketches
-data_path = '/kaggle/input/tinyquickdraw/sketches/sketches/whale.npz'
+# data_path = '/kaggle/input/tinyquickdraw/sketches/sketches/whale.npz'
+data_path = 'ambulance.npz'
 
 # Load from file
 dataset = np.load(data_path, encoding='latin1', allow_pickle=True)
@@ -42,20 +40,20 @@ data = dataset["train"]
 class VAE(nn.Module):
     def __init__(self):
         super(VAE, self).__init__()
-        #self.encoder = Encoder(5)
+        self.encoder = Encoder()
         self.decoder = Decoder()
 
 
     def forward(self, x):
-        # mean, logvar = self.encoder(x)
+        mean, logvar = self.encoder(x)
 
 
         sample = torch.randn(batch_size, latent_dim)
-        # std = torch.exp(logvar)
-        # z = mean + std*sample
+        std = torch.exp(logvar)
+        z = mean + std*sample
 
-        # x = self.decoder(z)
-        # return x, mean, logvar
+        x = self.decoder(z)
+        return x, mean, logvar
 
 
 model = VAE()

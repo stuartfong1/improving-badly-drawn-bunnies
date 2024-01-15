@@ -9,6 +9,7 @@ from torch.optim import Adam
 from sklearn.preprocessing import MinMaxScaler
 import seaborn as sns
 
+from encode_pen_state import encode_dataset1
 
 # Get file path for one class of sketches
 # data_path = '/kaggle/input/tinyquickdraw/sketches/sketches/whale.npz'
@@ -23,14 +24,14 @@ data = dataset["train"]
 lr = 2e-3
 hidden_dim = 2048
 latent_dim = 128
-num_features = 3 # will change to 5 with pen state encoding
+num_features = 5 # will change to 5 with pen state encoding
 batch_size = 100
 Nmax = max([len(i) for i in data])
 
 class Encoder(nn.Module):
-    def __init__(self, feature_number=num_features):
+    def __init__(self):
         super(Encoder, self).__init__()
-        self.lstm = nn.LSTM(feature_number, hidden_dim, bidirectional=True)
+        self.lstm = nn.LSTM(num_features, hidden_dim, bidirectional=True)
 
         self.fc_mu = nn.Linear(2*hidden_dim, latent_dim)
         self.fc_sigma = nn.Linear(2*hidden_dim, latent_dim)
@@ -84,14 +85,14 @@ def make_batch(size=batch_size):
     lengths = [len(image) for image in batch_images]
     strokes = []
     for image in batch_images:
-        new_image = np.zeros((Nmax, num_features))
-
-        # need to change the following when pen state is encoded
+        new_image = np.zeros((Nmax, 3))
         new_image[:len(image), :] = image[:len(image), :] # copy over values
         new_image[len(image):, :2] = 1 # set leftover empty coordinates to 1 to indicate end
-
         strokes.append(new_image)
-    return torch.from_numpy(np.stack(strokes, 1)).float(), lengths
+
+    encoded_strokes = np.stack(encode_dataset1(np.array(strokes)), 1) # don't forget to stack input along dim = 1
+    batch = torch.from_numpy(encoded_strokes.astype(float))
+    return batch, lengths
 
 
 def train():
