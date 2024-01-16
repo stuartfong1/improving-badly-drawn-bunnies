@@ -17,17 +17,11 @@ from decoder_lstm import distribution, Decoder
 from displayData import display
 from encode_pen_state import encode_pen_state, encode_dataset1, encode_dataset2
 from gaussian_mixture_model import gaussian_mixture_model, sample
-from normalize_data import normalize_data
 from sample_from_distribution import sample_latent_vector
 from SketchesDataset import SketchesDataset
-from pruning import graph_values, prune_data
-from encoder_lstm import Encoder, make_batch
+from encoder_lstm import Encoder
 
 
-lr = 2e-3
-batch_size = 100
-latent_dim = 128
-n_epochs = 20
 
 # Get file path for one class of sketches
 # data_path = '/kaggle/input/tinyquickdraw/sketches/sketches/whale.npz'
@@ -37,6 +31,12 @@ data_path = 'ambulance.npz'
 dataset = np.load(data_path, encoding='latin1', allow_pickle=True)
 data = dataset["train"]
 
+lr = 2e-3
+batch_size = 100
+latent_dim = 128
+n_epochs = 20
+Nmax = max([len(i) for i in data])
+
 class VAE(nn.Module):
     def __init__(self):
         super(VAE, self).__init__()
@@ -45,7 +45,7 @@ class VAE(nn.Module):
 
 
     def forward(self, x):
-        mean, logvar = self.encoder(x)
+        mean, logvar = self.encoder(x, 10) # 10 for now, change to batch_size when putting everything together
 
 
         sample = torch.randn(batch_size, latent_dim)
@@ -59,15 +59,144 @@ class VAE(nn.Module):
 model = VAE()
 # optimizer = Adam(model.parameters(), lr = lr)
 
+
+# Taken from normalize_data.py
+def normalize_data():
+
+    total_length = 0
+
+    for element in data:
+        total_length += (len(element))
+
+    coordinate_list = np.empty((total_length,2))
+
+    i = 0
+
+    for element in data:
+        coordinate_list[i:i+len(element),:] = element[:,0:2]
+        i+=len(element)
+
+    data_std = np.std(coordinate_list)
+
+    for i, element in enumerate(data):
+        data[i] = data[i].astype(np.float32)
+        data[i][:,0:2] = element[:,0:2].astype(np.float32)/data_std
+
+
+# Taken from pruning.py
+def graph_values(data):
+    """
+    Given a .npz file loaded in numpy arrays, graph a histogram and
+    a bell curve of the number of features. Returns and prints the
+    mean and std.
+
+    Parameters:
+        - data: a .npz file loaded in as numpy arrays.
+
+    Returns:
+        - (mean, std): a 2x1 tuple representing the mean and std of the data.
+    """
+
+    # Graphing values
+    data_val = np.zeros(0)
+    for i in data:
+        data_val = np.append(data_val, [len(i)])
+
+    plt.hist(data_val, bins=25, density=True, alpha=0.6, color='b') # graph a histogram of our values
+
+    plt.show()
+
+    mean = np.mean(data_val)
+    std = np.std(data_val)
+
+    plt.plot(data_val, norm.pdf(data_val, mean, std)) # pdf is probability, density function
+    plt.show()
+
+    print("Mean: ", mean)
+    print("Standard deviation: ", std)
+
+
+# Taken from pruning.py
+def prune_data(data, num_std=2.5):
+    """
+    Given a .npz file loaded in numpy arrays, prune the dataset based on its mean, std,
+    and a user-specified number of std (default is 2.5).
+
+    Parameters:
+        - data: a .npz file loaded in as numpy arrays.
+        - num_std: optional int for specifying how many images should be pruned.
+                    As num_std increases, less images are pruned, and vice versa.
+                    This should be a value between 0 and 3.
+
+    Returns:
+         - none
+    """
+    # get initial # of images
+    print(f"Initial number of images: {np.size(data)}")
+
+    # Get mean + std
+    data_val = np.zeros(0)
+    for i in data:
+        data_val = np.append(data_val, [len(i)])
+    mean = np.mean(data_val)
+    std = np.std(data_val)
+
+    lower = math.floor(mean - std*num_std)  # the lower bound of points allowed
+    upper = math.ceil(mean + std*num_std) # the upper bound of points allowed
+
+    i = 0
+    while i < np.size(data):
+        num_points = np.shape(data[i])[0] # gets number of points
+        if num_points < lower or num_points > upper:
+            data = np.delete(data, i)
+        else:
+            i += 1
+
+    # get final # of images
+    print(f"Number of images after pruning: {np.size(data)}")
+
+
+# Taken from encoder_lstm.py
+def make_batch(size=batch_size):
+    """
+    Using the data created earlier in the code and a given batch size, randomly fetch
+    that many images and return them + their lengths.
+
+    Parameters:
+        - size: the size of the batch. Default is the variable batch_size declared
+            at the start of the code.
+
+    Returns:
+        - batch: a tensor of the batch of random images appended in the order they were fetched in.
+        - lengths: the length of each image fetched, in the order they were fetched in.
+    """
+
+    batch_ids = np.random.choice(len(data), size)
+    batch_images = [data[id] for id in batch_ids]
+    lengths = [len(image) for image in batch_images]
+    strokes = []
+    for image in batch_images:
+        new_image = np.zeros((Nmax, 3))
+        new_image[:len(image), :] = image[:len(image), :] # copy over values
+        new_image[len(image):, :2] = 1 # set leftover empty coordinates to 1 to indicate end
+        strokes.append(new_image)
+
+    encoded_strokes = np.stack(encode_dataset1(np.array(strokes)), 1) # don't forget to stack input along dim = 1
+    batch = torch.from_numpy(encoded_strokes.astype(float))
+    return batch, lengths
+
+
 def train():
-    dataloader = DataLoader(data, batch_size=batch_size, shuffle=True)
     cur_step = 0
     total_loss = 0
     for _ in range(n_epochs):
-        for image, _ in tqdm(dataloader):
-            # Run predictions
+        batch, _ = make_batch(10)
+        for image in batch:
+            # Run predictions - [n * batch * 5] fed in, similar shape should come out
             output, mean, logvar = model(image)
             print(f"output: {output.shape}")
+            print(f"mean: {mean.shape}")
+            print(f"logvar: {logvar.shape}")
 
 if __name__ == "__main__":
     train()

@@ -27,7 +27,7 @@ latent_dim = 128
 num_features = 5 # will change to 5 with pen state encoding
 batch_size = 100
 Nmax = max([len(i) for i in data])
-
+#
 class Encoder(nn.Module):
     def __init__(self):
         super(Encoder, self).__init__()
@@ -36,7 +36,7 @@ class Encoder(nn.Module):
         self.fc_mu = nn.Linear(2*hidden_dim, latent_dim)
         self.fc_sigma = nn.Linear(2*hidden_dim, latent_dim)
 
-    def forward(self, x, batch_size):
+    def forward(self, x):
         """
         Runs a batch of images through the encoder and returns its latent vector.
         Does not normalize values on its own.
@@ -53,7 +53,7 @@ class Encoder(nn.Module):
         """
 
         # Get the hidden states
-        hidden, cell = torch.zeros(2, batch_size, hidden_dim), torch.zeros(2, batch_size, hidden_dim)
+        hidden, cell = torch.zeros(2, x.shape[1], hidden_dim), torch.zeros(2, x.shape[1], hidden_dim)
 
         _, (hidden, cell) = self.lstm(x.float(), (hidden, cell))
         hidden_forward_dir, hidden_backward_dir = torch.split(hidden, 1, 0)
@@ -99,7 +99,7 @@ def train():
     encoder.train() # set it to training mode
 
     batch, lengths = make_batch()
-    mean, logvar = encoder(batch, batch_size)
+    mean, logvar = encoder(batch)
     print(f" mean: {mean.size()} {mean}")
     print(f"logvar: {logvar.size()} {logvar}")
 
