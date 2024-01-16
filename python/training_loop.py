@@ -59,7 +59,6 @@ class VAE(nn.Module):
 model = VAE()
 # optimizer = Adam(model.parameters(), lr = lr)
 
-
 def train():
     dataloader = DataLoader(data, batch_size=batch_size, shuffle=True)
     cur_step = 0
@@ -68,6 +67,7 @@ def train():
         for image, _ in tqdm(dataloader):
             # Run predictions
             output, mean, logvar = model(image)
+            print(f"output: {output.shape}")
 
 if __name__ == "__main__":
-    pass
+    train()

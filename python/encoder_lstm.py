@@ -76,11 +76,11 @@ def make_batch(size=batch_size):
             at the start of the code.
 
     Returns:
-        - batch: the batch of random images appended in the order they were fetched in.
+        - batch: a tensor of the batch of random images appended in the order they were fetched in.
         - lengths: the length of each image fetched, in the order they were fetched in.
     """
 
-    batch_ids = np.random.choice(len(data), batch_size)
+    batch_ids = np.random.choice(len(data), size)
     batch_images = [data[id] for id in batch_ids]
     lengths = [len(image) for image in batch_images]
     strokes = []
