@@ -59,13 +59,14 @@ model = VAE()
 # optimizer = Adam(model.parameters(), lr = lr)
 
 
-# Taken from normalize_data.py
+# Original function taken from normalize_data.py
 def normalize_data():
 
     total_length = 0
 
     for element in data:
         total_length += (len(element))
+
 
     coordinate_list = np.empty((total_length,2))
 
@@ -80,6 +81,9 @@ def normalize_data():
     for i, element in enumerate(data):
         data[i] = data[i].astype(np.float32)
         data[i][:,0:2] = element[:,0:2].astype(np.float32)/data_std
+
+
+normalize_data()
 
 
 # Taken from pruning.py
@@ -195,6 +199,9 @@ def train():
         print(f"output: {output.shape}") # [num_strokes, num_images, num_features]
         print(f"mean: {mean.shape}")
         print(f"logvar: {logvar.shape}")
+        if n_epochs % 5 == 0:
+            # draw image
+            pass
 
 if __name__ == "__main__":
     train()
