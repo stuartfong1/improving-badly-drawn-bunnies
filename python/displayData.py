@@ -1,5 +1,14 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from encode_pen_state import encode_dataset1
+from encoder_lstm import make_batch
+
+# Get file path for one class of sketches
+data_path = '/kaggle/input/tinyquickdraw/sketches/sketches/whale.npz'
+
+# Load from file
+dataset = np.load(data_path, encoding='latin1', allow_pickle=True)
+data = dataset["train"]
 
 def display(imageNum):
     #Xplot and Yplot are array of points that will be plotted
