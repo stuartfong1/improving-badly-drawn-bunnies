@@ -66,7 +66,6 @@ def bivariate_normal_pdf(dx, dy, mu_x, mu_y, std_x, std_y, corr_xy):
 
 
 # Taken from strokes_reconstruction_loss.py
-
 def reconstruction_loss(dx, dy, mu_x, mu_y, std_x, std_y, corr_xy, pi, mask):
     """
     pi: The mixture probabilities
@@ -78,10 +77,11 @@ def reconstruction_loss(dx, dy, mu_x, mu_y, std_x, std_y, corr_xy, pi, mask):
     return -(1/(Nmax * batch_size)) * torch.sum(mask * torch.log(torch.sum(pi * pdf, axis=0)))
 
 
-def vae_loss(fake, real, mean, logvar):
-    recon_loss = reconstruction_loss()
-    kl = anneal_kl_loss()
-    return recon_loss + kl_loss
+# Taken from strokes_reconstruction_loss.py
+def vae_loss():
+    l_r = reconstruction_loss()
+    l_kl = 0
+    return l_s + l_kl
 
 
 model = VAE()
