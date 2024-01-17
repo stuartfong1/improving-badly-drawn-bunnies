@@ -15,4 +15,12 @@ class SketchesDataset():
         sketch = self.data_set['train'][idx]
         if self.transform:
             sketch = self.transform(sketch)
-        return sketch
+        return sketch, sketch.shape[0]
+    
+
+if __name__ == "__main__":
+    data = SketchesDataset(data_path="python/ambulance.npz")
+    sketch, len = data.__getitem__(0)
+    assert(sketch[len-1][2] == 1)
+    print("Tests passed!")
+            
