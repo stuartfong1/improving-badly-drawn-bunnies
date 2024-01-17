@@ -32,7 +32,7 @@ dataset = np.load(data_path, encoding='latin1', allow_pickle=True)
 data = dataset["train"]
 
 lr = 2e-3
-batch_size = 100
+batch_size = 128
 latent_dim = 128
 n_epochs = 20
 Nmax = max([len(i) for i in data])
@@ -45,11 +45,10 @@ class VAE(nn.Module):
 
 
     def forward(self, x):
-        mean, logvar = self.encoder(x, 10) # 10 for now, change to batch_size when putting everything together
-
+        mean, logvar = self.encoder(x)
 
         sample = torch.randn(batch_size, latent_dim)
-        std = torch.exp(logvar)
+        std = torch.exp(logvar/2) # logvar / 2 should be a float
         z = mean + std*sample
 
         x = self.decoder(z)
@@ -84,7 +83,7 @@ def normalize_data():
 
 
 # Taken from pruning.py
-def graph_values(data):
+def graph_values():
     """
     Given a .npz file loaded in numpy arrays, graph a histogram and
     a bell curve of the number of features. Returns and prints the
@@ -190,13 +189,12 @@ def train():
     cur_step = 0
     total_loss = 0
     for _ in range(n_epochs):
-        batch, _ = make_batch(10)
-        for image in batch:
-            # Run predictions - [n * batch * 5] fed in, similar shape should come out
-            output, mean, logvar = model(image)
-            print(f"output: {output.shape}")
-            print(f"mean: {mean.shape}")
-            print(f"logvar: {logvar.shape}")
+        batch, _ = make_batch(batch_size)
+        # Run predictions - [n * batch * 5] fed in, similar shape should come out
+        output, mean, logvar = model(batch)
+        print(f"output: {output.shape}") # [num_strokes, num_images, num_features]
+        print(f"mean: {mean.shape}")
+        print(f"logvar: {logvar.shape}")
 
 if __name__ == "__main__":
     train()
