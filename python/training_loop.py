@@ -14,12 +14,10 @@ from tqdm.auto import tqdm
 
 # import from other files
 from decoder_lstm import distribution, Decoder
-from displayData import display
-from encode_pen_state import encode_pen_state, encode_dataset1, encode_dataset2
-from gaussian_mixture_model import gaussian_mixture_model, sample
-from sample_from_distribution import sample_latent_vector
+from encode_pen_state import encode_dataset1
 from SketchesDataset import SketchesDataset
 from encoder_lstm import Encoder
+from anneal_kl_loss import anneal_kl_loss
 
 
 
@@ -55,8 +53,39 @@ class VAE(nn.Module):
         return x, mean, logvar
 
 
+# Taken from strokes_reconstruction_loss.py
+def bivariate_normal_pdf(dx, dy, mu_x, mu_y, std_x, std_y, corr_xy):
+    """
+    Return N(dx, dy | mu_x, mu_y, std_x, std_y, corr_xy)
+    """
+    z_x = (dx - mu_x) / std_x
+    z_y = (dy - mu_y) / std_y
+    exponent = -(z_x ** 2 - 2 * corr_xy * z_x * z_y + z_y ** 2) / 2 * (1 - corr_xy ** 2)
+    norm = 1 / (2 * np.pi * std_x * std_y * torch.sqrt(1-corr_xy ** 2))
+    return norm * torch.exp(exponent)
+
+
+# Taken from strokes_reconstruction_loss.py
+
+def reconstruction_loss(dx, dy, mu_x, mu_y, std_x, std_y, corr_xy, pi, mask):
+    """
+    pi: The mixture probabilities
+    mask: 1 if the point is not after the final stroke, 0 otherwise
+
+    Returns the reconstruction loss for the strokes, L_s
+    """
+    pdf = bivariate_normal_pdf(dx, dy, mu_x, mu_y, std_x, std_y, corr_xy)
+    return -(1/(Nmax * batch_size)) * torch.sum(mask * torch.log(torch.sum(pi * pdf, axis=0)))
+
+
+def vae_loss(fake, real, mean, logvar):
+    recon_loss = reconstruction_loss()
+    kl = anneal_kl_loss()
+    return recon_loss + kl_loss
+
+
 model = VAE()
-# optimizer = Adam(model.parameters(), lr = lr)
+optimizer = Adam(model.parameters(), lr = lr) # make sure the model learns from the loss functions
 
 
 # Original function taken from normalize_data.py
@@ -189,6 +218,37 @@ def make_batch(size=batch_size):
     return batch, lengths
 
 
+# based on display(imageNum) from displayData.py
+def display_encoded_image(image):
+    """
+    For some image tensor, draw the image using matplotlib.
+
+    Parameters:
+        - image: some [n*5] tensor representing a sketch.
+    Returns:
+        - none
+    """
+    #Xplot and Yplot are array of points that will be plotted
+    Xplot = [0]
+    Yplot = [0]
+    #Keeps track of the current point that is being drawn
+    xpos = 0
+    ypos = 0
+    #For loop to go through data and plot points
+    i=0
+    for i in range(len(image)):
+        xpos += float(image[i,0])
+        ypos += float(image[i,1])
+        Xplot.append(-xpos)
+        Yplot.append(-ypos)
+        if image[i,3] == 1:
+            plt.plot(Xplot, Yplot,color='black')
+            Xplot.clear()
+            Yplot.clear()
+        # elif image[i, 4] == 1:
+    plt.show()
+
+
 def train():
     cur_step = 0
     total_loss = 0
@@ -201,7 +261,9 @@ def train():
         print(f"logvar: {logvar.shape}")
         if n_epochs % 5 == 0:
             # draw image
-            pass
+            for i in range(batch_size):
+                display_encoded_image(output[:, i, :])
+
 
 if __name__ == "__main__":
     train()
