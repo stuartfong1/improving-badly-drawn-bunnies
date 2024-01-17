@@ -3,6 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 from math import sqrt
 from gaussian_mixture_model import sample
+from pen_reconstruction_loss import pen_reconstruction_loss
 
 M = 10 # number of normal distributions for output 
 T = 0.5 # temperature parameter
@@ -69,58 +70,74 @@ class Decoder(nn.Module):
         self.hidden_cell = (torch.zeros(1,batch_size,hidden_dim),
                             torch.zeros(1,batch_size,hidden_dim))
     
-    def forward(self, z, N_s = torch.full((batch_size,1),2**31-1)): 
+    def forward(self, z, stroke): 
         """
         Parameters:
             z - Tensor of size  (batch_size, latent_dim), with latent vector samples.
 
-            N_s - Tensor of size (batch_size), with lengths of each sketch sequence.
-            When generating new sketches, this is not needed.
+            stroke - Tensor of size (batch_size, stroke dim); previous stroke
+
 
         Returns:
-            Tensor of size (N_max, batch_size, stroke dim), with generated sketch sequences.
+            Tensor of size (N_max, batch_size, stroke dim), as the next stroke
         """
-        # Batch samples from latent space distributions
-        z = z.view(batch_size,latent_dim)
-        N_s = N_s.view(batch_size)
-        
-        # Obtain initial hidden and cell states by splitting result of fc_in along column axis
-        self.hidden_cell = torch.split(F.tanh(self.fc_in(z).view(1,latent_dim,2*hidden_dim)), 
+    
+        x = torch.cat((z,stroke),dim = 1).view(1,batch_size,input_dim)
+        out, self.hidden_cell = self.lstm(x,self.hidden_cell)
+
+        # Sample from output distribution. If temperature parameter is small,
+        # this becomes deterministic.
+        params = distribution(self.fc_proj(out))
+        stroke_next = sample(batch_size, *params)
+
+        return stroke_next, params
+    
+def run_decoder(Decoder,z,N_s = torch.full((batch_size,1),2**31-1)):
+    # Data for all strokes in output sequence
+    strokes = torch.zeros(N_max + 1, batch_size, stroke_dim)
+    strokes[0,:] = torch.tensor([0,0,1,0,0])
+
+    # Batch of samples from latent space distributions
+    z = z.view(batch_size,latent_dim)
+    N_s = N_s.view(batch_size)
+
+    # Obtain initial hidden and cell states by splitting result of fc_in along column axis
+    Decoder.hidden_cell = torch.split(F.tanh(Decoder.fc_in(z).view(1,latent_dim,2*hidden_dim)), 
                                        [hidden_dim, hidden_dim], 
                                        dim = 2)
-
-        # Data for all strokes in output sequence
-        strokes = torch.zeros(N_max + 1, batch_size, stroke_dim)
-        strokes[0,:] = torch.tensor([0,0,1,0,0])
-  
-        # For each timestep, pass the batch of strokes through LSTM cell and compute 
-        # the output.  Output of the previous timestep is used as input.
-        for i in range(0,N_max):
-            x = torch.cat((z,strokes[i,:,:]),dim = 1).view(1,batch_size,input_dim)
-
-            out, self.hidden_cell = self.lstm(x,self.hidden_cell)
-
-            # Sample from output distribution. If temperature parameter is small,
-            # this becomes deterministic.
-            params = distribution(self.fc_proj(out))
-            strokes[i+1] = sample(batch_size, *params)
-
-            #for strokes in generated sequence past sequence length, set to [0,0,0,0,1]
-            mask = (i > N_s)
-            empty_stroke = torch.tensor([0,0,0,0,1],dtype=torch.float32)
-            strokes[i+1,mask] = empty_stroke
-            
-        return strokes[1:,:,:] #ignore first stroke
     
-def dim_test(decoder):
-    z = torch.ones(batch_size,latent_dim) 
-    out = decoder.forward(z,torch.tensor(N_max/2).repeat(batch_size))
-    print('Dimension test passed ✅\n')
-    print("Output (first sketch in batch):\n")
-    print(out[:,0])
+    pen_loss = 0
+    temp_data = torch.ones(128,3) #placeholder input
+    
+    # For each timestep, pass the batch of strokes through LSTM and compute 
+    # the output.  Output of the previous timestep is used as input.
+    for i in range(1,N_max + 1):
+
+        #params will be used for computing loss
+        strokes[i],params = Decoder(z,strokes[i-1])
+
+        #params[6] is pen_state, temp_data will need to be replaced with the input data
+        pen_loss += pen_reconstruction_loss(batch_size,N_max,temp_data,params[6])
+
+        #for strokes in generated sequence past sequence length, set to [0,0,0,0,1]
+        mask = (i > N_s)
+        empty_stroke = torch.tensor([0,0,0,0,1],dtype=torch.float32)
+        strokes[i,mask] = empty_stroke
+    
+    print("Pen state reconstruction loss: " + str(pen_loss))
+    #MAKE SURE TO IGNORE THE FIRST STROKE AFTER THIS IS DONE
+    return strokes[1:,:,:]
+    
 
 if __name__ == "__main__":
     print("Running tests...\n")
     decoder = Decoder()
+   
     print("Decoder successfully initialiazed ✅\n")
-    dim_test(decoder)
+
+    z = torch.ones(batch_size,latent_dim) 
+    out = run_decoder(decoder,z)
+    print('Dimension test passed ✅\n')
+    print("Output (first sketch in batch):\n")
+    print(out[:,0])
+
