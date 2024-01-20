@@ -126,7 +126,7 @@ def run_decoder(Decoder,z,N_s = torch.full((batch_size,1),2**31-1)):
     
     print("Pen state reconstruction loss: " + str(pen_loss))
     #MAKE SURE TO IGNORE THE FIRST STROKE AFTER THIS IS DONE
-    return strokes[1:,:,:]
+    return strokes[1:,:,:],params
     
 
 if __name__ == "__main__":
@@ -136,7 +136,7 @@ if __name__ == "__main__":
     print("Decoder successfully initialiazed ✅\n")
 
     z = torch.ones(batch_size,latent_dim) 
-    out = run_decoder(decoder,z)
+    out, params = run_decoder(decoder,z)
     print('Dimension test passed ✅\n')
     print("Output (first sketch in batch):\n")
     print(out[:,0])

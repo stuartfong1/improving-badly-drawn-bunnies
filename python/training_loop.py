@@ -79,9 +79,10 @@ def reconstruction_loss(dx, dy, mu_x, mu_y, std_x, std_y, corr_xy, pi, mask):
 
 # Taken from strokes_reconstruction_loss.py
 def vae_loss():
-    l_r = reconstruction_loss()
-    l_kl = 0
-    return l_s + l_kl
+    # l_r = reconstruction_loss()
+    # l_kl = 0
+    # return l_s + l_kl
+    pass
 
 
 model = VAE()
