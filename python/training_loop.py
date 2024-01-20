@@ -13,11 +13,10 @@ import pandas as pd
 from tqdm.auto import tqdm
 
 # import from other files
-from decoder_lstm import distribution, Decoder
+from decoder_lstm import run_decoder, Decoder, M
 from encode_pen_state import encode_dataset1
 from SketchesDataset import SketchesDataset
 from encoder_lstm import Encoder
-from anneal_kl_loss import anneal_kl_loss
 
 
 
@@ -34,86 +33,10 @@ batch_size = 128
 latent_dim = 128
 n_epochs = 20
 Nmax = max([len(i) for i in data])
-
-class VAE(nn.Module):
-    def __init__(self):
-        super(VAE, self).__init__()
-        self.encoder = Encoder()
-        self.decoder = Decoder()
-
-
-    def forward(self, x):
-        mean, logvar = self.encoder(x)
-
-        sample = torch.randn(batch_size, latent_dim)
-        std = torch.exp(logvar/2) # logvar / 2 should be a float
-        z = mean + std*sample
-
-        x = self.decoder(z)
-        return x, mean, logvar
-
-
-# Taken from strokes_reconstruction_loss.py
-def bivariate_normal_pdf(dx, dy, mu_x, mu_y, std_x, std_y, corr_xy):
-    """
-    Return N(dx, dy | mu_x, mu_y, std_x, std_y, corr_xy)
-    """
-    z_x = (dx - mu_x) / std_x
-    z_y = (dy - mu_y) / std_y
-    exponent = -(z_x ** 2 - 2 * corr_xy * z_x * z_y + z_y ** 2) / 2 * (1 - corr_xy ** 2)
-    norm = 1 / (2 * np.pi * std_x * std_y * torch.sqrt(1-corr_xy ** 2))
-    return norm * torch.exp(exponent)
-
-
-# Taken from strokes_reconstruction_loss.py
-def reconstruction_loss(dx, dy, mu_x, mu_y, std_x, std_y, corr_xy, pi, mask):
-    """
-    pi: The mixture probabilities
-    mask: 1 if the point is not after the final stroke, 0 otherwise
-
-    Returns the reconstruction loss for the strokes, L_s
-    """
-    pdf = bivariate_normal_pdf(dx, dy, mu_x, mu_y, std_x, std_y, corr_xy)
-    return -(1/(Nmax * batch_size)) * torch.sum(mask * torch.log(torch.sum(pi * pdf, axis=0)))
-
-
-# Taken from strokes_reconstruction_loss.py
-def vae_loss():
-    # l_r = reconstruction_loss()
-    # l_kl = 0
-    # return l_s + l_kl
-    pass
-
-
-model = VAE()
-optimizer = Adam(model.parameters(), lr = lr) # make sure the model learns from the loss functions
-
-
-# Original function taken from normalize_data.py
-def normalize_data():
-
-    total_length = 0
-
-    for element in data:
-        total_length += (len(element))
-
-
-    coordinate_list = np.empty((total_length,2))
-
-    i = 0
-
-    for element in data:
-        coordinate_list[i:i+len(element),:] = element[:,0:2]
-        i+=len(element)
-
-    data_std = np.std(coordinate_list)
-
-    for i, element in enumerate(data):
-        data[i] = data[i].astype(np.float32)
-        data[i][:,0:2] = element[:,0:2].astype(np.float32)/data_std
-
-
-normalize_data()
+w_kl = 0.5 # weight for loss calculation, can be tuned if needed
+anneal_loss = False # True if train using annealed kl loss, False otherwise
+kl_logvar = 0 # needed for kl loss
+kl_mean = 0 # needed for kl loss
 
 
 # Taken from pruning.py
@@ -219,6 +142,33 @@ def make_batch(size=batch_size):
     return batch, lengths
 
 
+# Original function taken from normalize_data.py
+def normalize_data():
+
+    total_length = 0
+
+    for element in data:
+        total_length += (len(element))
+
+
+    coordinate_list = np.empty((total_length,2))
+
+    i = 0
+
+    for element in data:
+        coordinate_list[i:i+len(element),:] = element[:,0:2]
+        i+=len(element)
+
+    data_std = np.std(coordinate_list)
+
+    for i, element in enumerate(data):
+        data[i] = data[i].astype(np.float32)
+        data[i][:,0:2] = element[:,0:2].astype(np.float32)/data_std
+
+
+normalize_data()
+
+
 # based on display(imageNum) from displayData.py
 def display_encoded_image(image):
     """
@@ -250,21 +200,146 @@ def display_encoded_image(image):
     plt.show()
 
 
+class VAE(nn.Module):
+    def __init__(self):
+        super(VAE, self).__init__()
+        self.encoder = Encoder()
+        self.decoder = Decoder()
+        self.encoder_optimizer = Adam(self.encoder.parameters(), lr = lr)
+        self.decoder_optimizer = Adam(self.encoder.parameters(), lr = lr)
+
+
+    def forward(self, x):
+        mean, logvar = self.encoder(x)
+        kl_mean = mean
+        kl_logvar = logvar
+
+        sample = torch.randn(batch_size, latent_dim)
+        std = torch.exp(logvar/2) # logvar / 2 should be a float
+        z = mean + std*sample
+
+        x, params = run_decoder(self.decoder, z)
+        return x, params
+
+
+# Taken from strokes_reconstruction_loss.py
+def bivariate_normal_pdf(dx, dy, mu_x, mu_y, std_x, std_y, corr_xy):
+    """
+    Return N(dx, dy | mu_x, mu_y, std_x, std_y, corr_xy)
+    """
+    z_x = (dx - mu_x) / std_x
+    z_y = (dy - mu_y) / std_y
+    exponent = -(z_x ** 2 - 2 * corr_xy * z_x * z_y + z_y ** 2) / 2 * (1 - corr_xy ** 2)
+    norm = 1 / (2 * np.pi * std_x * std_y * torch.sqrt(1-corr_xy ** 2))
+    return norm * torch.exp(exponent)
+
+
+# Taken from strokes_reconstruction_loss.py
+def reconstruction_loss(dx, dy, mu_x, mu_y, std_x, std_y, corr_xy, pi, mask):
+    """
+    pi: The mixture probabilities
+    mask: 1 if the point is not after the final stroke, 0 otherwise
+
+    Returns the reconstruction loss for the strokes, L_s
+    """
+    pdf = bivariate_normal_pdf(dx, dy, mu_x, mu_y, std_x, std_y, corr_xy)
+    return -(1/(Nmax * batch_size)) * torch.sum(mask * torch.log(torch.sum(pi * pdf, axis=0)))
+
+
+# Taken from KL_loss.py
+def kl_loss(sigma_hat, mu):
+    # torch.sum is added to sum over all the dimensions of the vectors
+    return (-0.5 / latent_dim) * torch.sum(1 + sigma_hat - torch.square(mu) - torch.exp(sigma_hat))
+
+
+# Taken from anneal_kl_loss.py
+def anneal_kl_loss(num_training_steps, reconstruction_loss, kl_loss):
+    # Hyperparameters
+    n_min = 0.01  # Starting Value from paper
+    R = 0.9995  # R is a term close to but less than 1.
+    KL_min = 0.1 # Value from paper (needs to be between 0.1 and 0.5)
+    w_KL = 1.0  # Weight for the KL divergence part of the loss (can tune as needed, 1.0 is standard)
+
+    # Initialize
+    n_step = n_min
+    total_loss = 0
+
+    # Training loop
+    for step in range(num_training_steps):
+        # Calculate n_step
+        n_step = 1 - (1 - n_min) * R**step
+
+        # Calculate the total weighted loss
+        step_loss = reconstruction_loss + w_KL * n_step * max(kl_loss, KL_min)
+        total_loss += step_loss
+
+    return total_loss
+
+
+def make_target(batch, lengths):
+    mask = torch.zeros((Nmax + 1, batch.size()[1]))
+    for index, num_strokes in enumerate(lengths):
+        mask[:num_strokes, index] = 1
+
+    dx = torch.stack([batch[:, :, 0]] * M, 2)
+    dy = torch.stack([batch[:, :, 1]] * M, 2)
+    # copy + append together pen state values
+    p = torch.stack([batch.data[:, :, 2], batch.data[:, :, 3], batch.data[:, :, 4]], 2)
+
+    return mask, dx, dy, p
+
+
 def train():
     cur_step = 0
     total_loss = 0
-    for _ in range(n_epochs):
-        batch, _ = make_batch(batch_size)
+    for epoch in range(n_epochs):
+        batch, lengths = make_batch(batch_size)
         # Run predictions - [n * batch * 5] fed in, similar shape should come out
-        output, mean, logvar = model(batch)
-        print(f"output: {output.shape}") # [num_strokes, num_images, num_features]
-        print(f"mean: {mean.shape}")
-        print(f"logvar: {logvar.shape}")
+        output, params = model(batch)
+
+        mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy = torch.stack(params[:-1], 1).squeeze(0)
+        pen_state = torch.Tensor(params[-1]).squeeze()
+
+        model.encoder_optimizer.zero_grad()
+        model.decoder_optimizer.zero_grad()
+
+        mask, dx, dy, p = make_target(batch, lengths)
+        w_kl = 0.5 # weight for loss calculation, can be tuned if needed
+
+        # parameters required:
+        # num_training_steps (tunable), compute_reconstruction_loss, compute_kl_divergence, prediction, target, mu, sigma_hat (anneal)
+        # sigma_hat (logvar) , mu (mean) from final concatenated hidden state (kl loss)
+        # dx, dy, mu_x, mu_y, std_x, std_y, corr_xy, pi, mask (stroke reconstruction)
+
+        # size of dx and mu_x (and dy and mu_y) do not match.
+        l_r = reconstruction_loss(dx, dy, mean_x, mean_y, std_x, std_y, corr_xy, mixture_weights, mask)
+        l_kl = kl_loss(kl_logvar, kl_mean)
+
+        if anneal_loss:
+            # the first parameter is num_training_steps, which is tunable
+            loss = anneal_kl_loss(20, l_r, l_kl)
+        else:
+            loss = l_r + w_kl*l_kl
+        loss.backward()
+
+        grad_threshold = 1.0 # tunable parameter, prevents exploding gradient
+        nn.utils.clip_grad_norm(model.encoder.parameters(), grad_threshold)
+        nn.utils.clip_grad_norm(model.decoder.parameters(), grad_threshold)
+
+        # update encoder and decoder parameters using adam algorithm
+        model.encoder_optimizer.step()
+        model.decoder_optimizer.step()
+
+        print(f"Epoch: {epoch}: Loss")
+
         if n_epochs % 5 == 0:
             # draw image
             for i in range(batch_size):
                 display_encoded_image(output[:, i, :])
 
+
+
+model = VAE()
 
 if __name__ == "__main__":
     train()

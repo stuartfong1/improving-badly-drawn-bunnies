@@ -1,3 +1,5 @@
+import torch
+
 # Number of dimensions in latent vector
 latent_dim = 128
 def KL_loss(sigma_hat, mu):
