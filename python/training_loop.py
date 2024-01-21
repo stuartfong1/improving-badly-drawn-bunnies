@@ -17,6 +17,7 @@ from decoder_lstm import run_decoder, Decoder, M
 from encode_pen_state import encode_dataset1
 from SketchesDataset import SketchesDataset
 from encoder_lstm import Encoder
+from pen_reconstruction_loss import pen_reconstruction_loss
 
 
 
@@ -37,6 +38,7 @@ w_kl = 0.5 # weight for loss calculation, can be tuned if needed
 anneal_loss = False # True if train using annealed kl loss, False otherwise
 kl_logvar = 0 # needed for kl loss
 kl_mean = 0 # needed for kl loss
+dec_hidden_dim = 2048 # dimension of cell and hidden states
 
 
 # Taken from pruning.py
@@ -209,7 +211,7 @@ class VAE(nn.Module):
         self.decoder_optimizer = Adam(self.encoder.parameters(), lr = lr)
 
 
-    def forward(self, x):
+    def forward(self, x, N_s = torch.full((batch_size,1),Nmax)):
         mean, logvar = self.encoder(x)
         kl_mean = mean
         kl_logvar = logvar
@@ -218,8 +220,65 @@ class VAE(nn.Module):
         std = torch.exp(logvar/2) # logvar / 2 should be a float
         z = mean + std*sample
 
-        x, params = run_decoder(self.decoder, z)
-        return x, params
+        # Code from old run_decoder method
+
+        # Data for all strokes in output sequence
+        strokes = torch.zeros(Nmax + 1, batch_size, 5)
+        strokes[0,:] = torch.tensor([0,0,1,0,0])
+
+        # Batch of samples from latent space distributions
+        z = z.view(batch_size,latent_dim)
+
+        #THIS IS ONLY A PLACEHOLDER SKETCH LENGTH.  IT MUST NOT BE Nmax FOR THE FINAL MODEL
+        # replace with equivalent of lengths array
+
+
+        # Obtain initial hidden and cell states by splitting result of fc_in along column axis
+        self.decoder.hidden_cell = torch.split(F.tanh(self.decoder.fc_in(z).view(1,latent_dim,2*dec_hidden_dim)),
+                                          [dec_hidden_dim, dec_hidden_dim],
+                                          dim = 2)
+        pen_loss = 0
+        offset_loss = 0
+
+        mask, dx, dy, p = make_target(x, N_s)
+
+        # For each timestep, pass the batch of strokes through LSTM and compute
+        # the output.  Output of the previous timestep is used as input.
+        for i in range(1,Nmax + 1):
+
+            #params will be used for computing loss
+            strokes[i], params = self.decoder(z,strokes[i-1])
+
+            input_stroke = x[i]
+
+            # parameters required:
+            # num_training_steps (tunable), compute_reconstruction_loss, compute_kl_divergence, prediction, target, mu, sigma_hat (anneal)
+            # sigma_hat (logvar) , mu (mean) from final concatenated hidden state (kl loss)
+            # dx, dy, mu_x, mu_y, std_x, std_y, corr_xy, pi, mask (stroke reconstruction)
+
+            # calculate loss at each timestep
+
+            #params[6] is pen_state, input_stroke is the input data
+            pen_loss += pen_reconstruction_loss(batch_size,Nmax,input_stroke[:,2:],params[6])
+
+            # size of dx and mu_x (and dy and mu_y) do not match.
+            offset_loss += reconstruction_loss(dx[i], dy[i], *(params[:-1]), mask[i])
+
+            print(f"Loss at step {i}: {pen_loss + offset_loss}")
+
+            # TODO: fix the following block
+
+            #for strokes in generated sequence past sequence length, set to [0,0,0,0,1]
+            stroke_mask = (i > N_s) # boolean mask set to false when i is larger than sketch size
+            empty_stroke = torch.tensor([0,0,0,0,1],dtype=torch.float32)
+            strokes[i,:,stroke_mask] = empty_stroke # stroke size mismatch
+
+        print("Pen state reconstruction loss: " + str(pen_loss))
+        #MAKE SURE TO IGNORE THE FIRST STROKE AFTER THIS IS DONE
+
+        print("Total loss", offset_loss + pen_loss)
+
+        return strokes[1:], offset_loss + pen_loss
 
 
 # Taken from strokes_reconstruction_loss.py
@@ -235,13 +294,16 @@ def bivariate_normal_pdf(dx, dy, mu_x, mu_y, std_x, std_y, corr_xy):
 
 
 # Taken from strokes_reconstruction_loss.py
-def reconstruction_loss(dx, dy, mu_x, mu_y, std_x, std_y, corr_xy, pi, mask):
+def reconstruction_loss(dx, dy, pi, mu_x, mu_y, std_x, std_y, corr_xy, mask):
     """
     pi: The mixture probabilities
     mask: 1 if the point is not after the final stroke, 0 otherwise
 
     Returns the reconstruction loss for the strokes, L_s
     """
+
+    # Duplicate mask or fix the 10?
+
     pdf = bivariate_normal_pdf(dx, dy, mu_x, mu_y, std_x, std_y, corr_xy)
     return -(1/(Nmax * batch_size)) * torch.sum(mask * torch.log(torch.sum(pi * pdf, axis=0)))
 
@@ -281,8 +343,8 @@ def make_target(batch, lengths):
     for index, num_strokes in enumerate(lengths):
         mask[:num_strokes, index] = 1
 
-    dx = torch.stack([batch[:, :, 0]] * M, 2)
-    dy = torch.stack([batch[:, :, 1]] * M, 2)
+    dx = batch[:, :, 0]
+    dy = batch[:, :, 1]
     # copy + append together pen state values
     p = torch.stack([batch.data[:, :, 2], batch.data[:, :, 3], batch.data[:, :, 4]], 2)
 
@@ -295,32 +357,30 @@ def train():
     for epoch in range(n_epochs):
         batch, lengths = make_batch(batch_size)
         # Run predictions - [n * batch * 5] fed in, similar shape should come out
-        output, params = model(batch)
+        output, l_r = model(batch)
 
-        mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy = torch.stack(params[:-1], 1).squeeze(0)
-        pen_state = torch.Tensor(params[-1]).squeeze()
+        #pen_state = torch.Tensor(params[-1]).squeeze()
+        #mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy = torch.stack(params[:-1], 1).squeeze(0)
 
         model.encoder_optimizer.zero_grad()
         model.decoder_optimizer.zero_grad()
 
-        mask, dx, dy, p = make_target(batch, lengths)
         w_kl = 0.5 # weight for loss calculation, can be tuned if needed
-
-        # parameters required:
-        # num_training_steps (tunable), compute_reconstruction_loss, compute_kl_divergence, prediction, target, mu, sigma_hat (anneal)
-        # sigma_hat (logvar) , mu (mean) from final concatenated hidden state (kl loss)
-        # dx, dy, mu_x, mu_y, std_x, std_y, corr_xy, pi, mask (stroke reconstruction)
-
-        # size of dx and mu_x (and dy and mu_y) do not match.
-        l_r = reconstruction_loss(dx, dy, mean_x, mean_y, std_x, std_y, corr_xy, mixture_weights, mask)
         l_kl = kl_loss(kl_logvar, kl_mean)
 
+        # get the total loss from the model forward(), add it to our kl
+
         if anneal_loss:
-            # the first parameter is num_training_steps, which is tunable
-            loss = anneal_kl_loss(20, l_r, l_kl)
+            pass
         else:
-            loss = l_r + w_kl*l_kl
-        loss.backward()
+            pass
+
+    # if anneal_loss:
+        #     # the first parameter is num_training_steps, which is tunable
+        #     loss = anneal_kl_loss(20, l_r, l_kl)
+        # else:
+        #     loss = l_r + w_kl*l_kl
+        # loss.backward()
 
         grad_threshold = 1.0 # tunable parameter, prevents exploding gradient
         nn.utils.clip_grad_norm(model.encoder.parameters(), grad_threshold)
@@ -330,7 +390,7 @@ def train():
         model.encoder_optimizer.step()
         model.decoder_optimizer.step()
 
-        print(f"Epoch: {epoch}: Loss")
+        # print(f"Epoch: {epoch}: Loss: {loss.data_item()}")
 
         if n_epochs % 5 == 0:
             # draw image

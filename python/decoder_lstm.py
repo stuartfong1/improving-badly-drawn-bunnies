@@ -91,7 +91,7 @@ class Decoder(nn.Module):
         stroke_next = sample(batch_size, *params)
 
         return stroke_next, params
-    
+
 def run_decoder(Decoder,z,N_s = torch.full((batch_size,1),2**31-1)):
     # Data for all strokes in output sequence
     strokes = torch.zeros(N_max + 1, batch_size, stroke_dim)

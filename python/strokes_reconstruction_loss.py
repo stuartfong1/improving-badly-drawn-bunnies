@@ -8,7 +8,7 @@ def bivariate_normal_pdf(dx, dy, mu_x, mu_y, std_x, std_y, corr_xy):
     norm = 1 / (2 * np.pi * std_x * std_y * torch.sqrt(1-corr_xy ** 2))
     return norm * torch.exp(exponent)
 
-def reconstruction_loss(dx, dy, mu_x, mu_y, std_x, std_y, corr_xy, pi, mask):
+def reconstruction_loss(dx, dy, pi, mu_x, mu_y, std_x, std_y, corr_xy, mask):
     """
     pi: The mixture probabilities
     mask: 1 if the point is not after the final stroke, 0 otherwise
