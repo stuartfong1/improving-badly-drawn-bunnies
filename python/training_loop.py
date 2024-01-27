@@ -244,7 +244,7 @@ class VAE(nn.Module):
 
         # For each timestep, pass the batch of strokes through LSTM and compute
         # the output.  Output of the previous timestep is used as input.
-        for i in range(1,Nmax + 1):
+        for i in range(1,Nmax):
 
             #params will be used for computing loss
             strokes[i], params = self.decoder(z,strokes[i-1])
@@ -270,8 +270,12 @@ class VAE(nn.Module):
 
             #for strokes in generated sequence past sequence length, set to [0,0,0,0,1]
             stroke_mask = (i > N_s) # boolean mask set to false when i is larger than sketch size
-            empty_stroke = torch.tensor([0,0,0,0,1],dtype=torch.float32)
-            strokes[i,:,stroke_mask] = empty_stroke # stroke size mismatch
+
+            for index in range(len(stroke_mask)):
+                # stroke_mask[0] = True # Debug Code
+                if stroke_mask[index] == True:
+                    empty_stroke = torch.tensor([0,0,0,0,1],dtype=torch.float32)
+                    strokes[i,index,:] = empty_stroke # stroke size mismatch
 
         print("Pen state reconstruction loss: " + str(pen_loss))
         #MAKE SURE TO IGNORE THE FIRST STROKE AFTER THIS IS DONE
@@ -371,16 +375,12 @@ def train():
         # get the total loss from the model forward(), add it to our kl
 
         if anneal_loss:
-            pass
+            # the first parameter is num_training_steps, which is tunable
+            loss = anneal_kl_loss(20, l_r, l_kl)
         else:
-            pass
+            loss = l_r + w_kl * l_kl
 
-    # if anneal_loss:
-        #     # the first parameter is num_training_steps, which is tunable
-        #     loss = anneal_kl_loss(20, l_r, l_kl)
-        # else:
-        #     loss = l_r + w_kl*l_kl
-        # loss.backward()
+        loss.backward()
 
         grad_threshold = 1.0 # tunable parameter, prevents exploding gradient
         nn.utils.clip_grad_norm(model.encoder.parameters(), grad_threshold)
