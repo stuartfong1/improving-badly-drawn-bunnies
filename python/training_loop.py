@@ -13,7 +13,7 @@ import pandas as pd
 from tqdm.auto import tqdm
 
 # import from other files
-from decoder_lstm import run_decoder, Decoder, M
+from decoder_lstm import Decoder, M
 from encode_pen_state import encode_dataset1
 from SketchesDataset import SketchesDataset
 from encoder_lstm import Encoder
@@ -32,7 +32,7 @@ data = dataset["train"]
 # TODO: Solve NaN gradients problem
 
 lr = 2e-3 # Used to be 2e-3 but got NaN gradients
-batch_size = 15 # modification here requires modification in decoder_lstm.py
+batch_size = 50 # modification here requires modification in decoder_lstm.py
 latent_dim = 128
 n_epochs = 20
 Nmax = max([len(i) for i in data])
@@ -256,11 +256,18 @@ class VAE(nn.Module):
 
             #params[6] is pen_state, input_stroke is the input data
             pen_loss += pen_reconstruction_loss(batch_size,Nmax,input_stroke[:,2:],params[6])
-
             # size of dx and mu_x (and dy and mu_y) do not match.
-            offset_loss += reconstruction_loss(dx[i], dy[i], *(params[:-1]), mask[i])
 
-            print(f"Loss at step {i}: {pen_loss + offset_loss}")
+            offset_params = [params[i].view(batch_size,M) for i in range(0,6)]
+
+            offset_loss += reconstruction_loss(
+                dx[i].view(batch_size,1),
+                dy[i].view(batch_size,1),
+                *offset_params,
+                mask[i].view(batch_size,1)
+            )
+
+            print(f"Loss at step {i}: {pen_loss.item()},  {offset_loss.item()}")
 
             #for strokes in generated sequence past sequence length, set to [0,0,0,0,1]
             stroke_mask = (i > N_s) # boolean mask set to false when i is larger than sketch size
@@ -269,8 +276,9 @@ class VAE(nn.Module):
                 # stroke_mask[0] = True # Debug Code
                 if stroke_mask[index] == True:
                     empty_stroke = torch.tensor([0,0,0,0,1],dtype=torch.float32)
-                    strokes[i,index,:] = empty_stroke # stroke size mismatch
+                    strokes[i,index,:] = empty_stroke
 
+        print("Offset reconstruction loss: " + str(offset_loss.item()))
         print("Pen state reconstruction loss: " + str(pen_loss.item()))
         #MAKE SURE TO IGNORE THE FIRST STROKE AFTER THIS IS DONE
 
@@ -286,7 +294,7 @@ def bivariate_normal_pdf(dx, dy, mu_x, mu_y, std_x, std_y, corr_xy):
     """
     z_x = (dx - mu_x) / std_x
     z_y = (dy - mu_y) / std_y
-    exponent = -(z_x ** 2 - 2 * corr_xy * z_x * z_y + z_y ** 2) / 2 * (1 - corr_xy ** 2)
+    exponent = -(z_x ** 2 - 2 * corr_xy * z_x * z_y + z_y ** 2) / (2 * (1 - corr_xy ** 2))
     norm = 1 / (2 * np.pi * std_x * std_y * torch.sqrt(1-corr_xy ** 2))
     return norm * torch.exp(exponent)
 
@@ -299,11 +307,8 @@ def reconstruction_loss(dx, dy, pi, mu_x, mu_y, std_x, std_y, corr_xy, mask):
 
     Returns the reconstruction loss for the strokes, L_s
     """
-
-    # Duplicate mask or fix the 10?
-
     pdf = bivariate_normal_pdf(dx, dy, mu_x, mu_y, std_x, std_y, corr_xy)
-    return -(1/(Nmax * batch_size)) * torch.sum(mask * torch.log(torch.sum(pi * pdf, axis=0)))
+    return -(1/(Nmax * batch_size)) * torch.sum(mask * torch.log(1e-5 + torch.sum(pi*pdf,axis=1).view(150,1)))  # mask is size 150, torch.log(...) is size 10
 
 
 # Taken from KL_loss.py
@@ -373,7 +378,8 @@ def train():
             # the first parameter is num_training_steps, which is tunable
             loss = anneal_kl_loss(20, l_r, l_kl)
         else:
-            loss = l_r + w_kl * l_kl
+            loss = l_r + w_kl * l_kl # had an incident w/ epoch 3 having over 1k loss - investigate?
+            print("KL Loss: " + l_kl)
 
         loss.backward()
 
@@ -390,10 +396,10 @@ def train():
         # print(model.encoder_optimizer.param_groups) # More Debug Code 
 
         print("---------------------------------------------------------")
-
-        if n_epochs % 5 == 0:
-            # draw image
-            display_encoded_image(output[:, np.random.randint(batch_size), :])
+        #
+        # if n_epochs % 5 == 0:
+        #     # draw image
+        #     display_encoded_image(output[:, np.random.randint(batch_size), :])
 
 
 

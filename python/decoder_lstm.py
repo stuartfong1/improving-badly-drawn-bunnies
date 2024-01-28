@@ -8,7 +8,7 @@ from pen_reconstruction_loss import pen_reconstruction_loss
 M = 10 # number of normal distributions for output 
 T = 0.5 # temperature parameter
 sqrtT = sqrt(T) # 
-batch_size = 15
+batch_size = 50
 N_max = 10 # maximum number of strokes for sketch in dataset
 hidden_dim = 2048 # dimension of cell and hidden states
 latent_dim = 128 
@@ -105,14 +105,14 @@ def run_decoder(Decoder,z,N_s = torch.full((batch_size,1),2**31-1)):
     N_s = N_s.view(batch_size)
 
     # Obtain initial hidden and cell states by splitting result of fc_in along column axis
-    Decoder.hidden_cell = torch.split(F.tanh(Decoder.fc_in(z).view(1,latent_dim,2*hidden_dim)), 
-                                       [hidden_dim, hidden_dim], 
+    Decoder.hidden_cell = torch.split(F.tanh(Decoder.fc_in(z).view(1,latent_dim,2*hidden_dim)),
+                                       [hidden_dim, hidden_dim],
                                        dim = 2)
-    
+
     pen_loss = 0
     temp_data = torch.ones(128,3) #placeholder input
-    
-    # For each timestep, pass the batch of strokes through LSTM and compute 
+
+    # For each timestep, pass the batch of strokes through LSTM and compute
     # the output.  Output of the previous timestep is used as input.
     for i in range(1,N_max + 1):
 
@@ -126,11 +126,11 @@ def run_decoder(Decoder,z,N_s = torch.full((batch_size,1),2**31-1)):
         mask = (i > N_s)
         empty_stroke = torch.tensor([0,0,0,0,1],dtype=torch.float32)
         strokes[i,mask] = empty_stroke
-    
+
     print("Pen state reconstruction loss: " + str(pen_loss))
     #MAKE SURE TO IGNORE THE FIRST STROKE AFTER THIS IS DONE
     return strokes[1:,:,:],params
-    
+
 
 if __name__ == "__main__":
     print("Running tests...\n")

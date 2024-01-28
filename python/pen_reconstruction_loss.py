@@ -14,7 +14,7 @@ def pen_reconstruction_loss(batch_size, N_max, input_pen_state, output):
         Reconstruction loss for pen state.
     """    
 
-    return -1/(N_max*batch_size) * torch.sum(input_pen_state*torch.log(output.view(batch_size,3)))
+    return -1/(N_max*batch_size) * torch.sum(input_pen_state*torch.log(1e-5+output.view(batch_size,3)))
 
 
     
