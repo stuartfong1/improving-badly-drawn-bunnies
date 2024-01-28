@@ -83,6 +83,7 @@ class Decoder(nn.Module):
         """
     
         x = torch.cat((z,stroke),dim = 1).view(1,batch_size,input_dim)
+
         out, self.hidden_cell = self.lstm(x,self.hidden_cell)
 
         # Sample from output distribution. If temperature parameter is small,

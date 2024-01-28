@@ -29,15 +29,13 @@ data_path = 'ambulance.npz'
 dataset = np.load(data_path, encoding='latin1', allow_pickle=True)
 data = dataset["train"]
 
-lr = 2e-3
+lr = 2e-10 # Used to be 2e-3 but got NaN gradients
 batch_size = 128
 latent_dim = 128
 n_epochs = 20
 Nmax = max([len(i) for i in data])
 w_kl = 0.5 # weight for loss calculation, can be tuned if needed
 anneal_loss = False # True if train using annealed kl loss, False otherwise
-kl_logvar = 0 # needed for kl loss
-kl_mean = 0 # needed for kl loss
 dec_hidden_dim = 2048 # dimension of cell and hidden states
 
 
@@ -213,12 +211,13 @@ class VAE(nn.Module):
 
     def forward(self, x, N_s = torch.full((batch_size,1),Nmax)):
         mean, logvar = self.encoder(x)
-        kl_mean = mean
-        kl_logvar = logvar
 
         sample = torch.randn(batch_size, latent_dim)
         std = torch.exp(logvar/2) # logvar / 2 should be a float
         z = mean + std*sample
+
+        if torch.isnan(z)[0, 0]: # debug code
+            print()
 
         # Code from old run_decoder method
 
@@ -251,11 +250,6 @@ class VAE(nn.Module):
 
             input_stroke = x[i]
 
-            # parameters required:
-            # num_training_steps (tunable), compute_reconstruction_loss, compute_kl_divergence, prediction, target, mu, sigma_hat (anneal)
-            # sigma_hat (logvar) , mu (mean) from final concatenated hidden state (kl loss)
-            # dx, dy, mu_x, mu_y, std_x, std_y, corr_xy, pi, mask (stroke reconstruction)
-
             # calculate loss at each timestep
 
             #params[6] is pen_state, input_stroke is the input data
@@ -277,12 +271,12 @@ class VAE(nn.Module):
                     empty_stroke = torch.tensor([0,0,0,0,1],dtype=torch.float32)
                     strokes[i,index,:] = empty_stroke # stroke size mismatch
 
-        print("Pen state reconstruction loss: " + str(pen_loss))
+        print("Pen state reconstruction loss: " + str(pen_loss.item()))
         #MAKE SURE TO IGNORE THE FIRST STROKE AFTER THIS IS DONE
 
-        print("Total loss", offset_loss + pen_loss)
+        print("Total loss", (offset_loss + pen_loss).item())
 
-        return strokes[1:], offset_loss + pen_loss
+        return strokes[1:], offset_loss + pen_loss, mean, logvar
 
 
 # Taken from strokes_reconstruction_loss.py
@@ -361,16 +355,13 @@ def train():
     for epoch in range(n_epochs):
         batch, lengths = make_batch(batch_size)
         # Run predictions - [n * batch * 5] fed in, similar shape should come out
-        output, l_r = model(batch)
+        output, l_r, mean, logvar = model(batch)
 
         #pen_state = torch.Tensor(params[-1]).squeeze()
         #mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy = torch.stack(params[:-1], 1).squeeze(0)
 
-        model.encoder_optimizer.zero_grad()
-        model.decoder_optimizer.zero_grad()
-
         w_kl = 0.5 # weight for loss calculation, can be tuned if needed
-        l_kl = kl_loss(kl_logvar, kl_mean)
+        l_kl = kl_loss(logvar, mean)
 
         # get the total loss from the model forward(), add it to our kl
 
@@ -383,19 +374,22 @@ def train():
         loss.backward()
 
         grad_threshold = 1.0 # tunable parameter, prevents exploding gradient
-        nn.utils.clip_grad_norm(model.encoder.parameters(), grad_threshold)
-        nn.utils.clip_grad_norm(model.decoder.parameters(), grad_threshold)
+        nn.utils.clip_grad_norm_(model.encoder.parameters(), grad_threshold)
+        nn.utils.clip_grad_norm_(model.decoder.parameters(), grad_threshold)
 
         # update encoder and decoder parameters using adam algorithm
         model.encoder_optimizer.step()
         model.decoder_optimizer.step()
 
-        # print(f"Epoch: {epoch}: Loss: {loss.data_item()}")
+        model.encoder_optimizer.zero_grad()
+        model.decoder_optimizer.zero_grad()
+
+        print(f"Epoch: {epoch + 1}, Loss: {loss.item()}")
+        print("---------------------------------------------------------")
 
         if n_epochs % 5 == 0:
             # draw image
-            for i in range(batch_size):
-                display_encoded_image(output[:, i, :])
+            display_encoded_image(output[:, np.random.randint(batch_size), :])
 
 
 
