@@ -8,7 +8,7 @@ from pen_reconstruction_loss import pen_reconstruction_loss
 M = 10 # number of normal distributions for output 
 T = 0.5 # temperature parameter
 sqrtT = sqrt(T) # 
-batch_size = 128
+batch_size = 15
 N_max = 10 # maximum number of strokes for sketch in dataset
 hidden_dim = 2048 # dimension of cell and hidden states
 latent_dim = 128 
@@ -70,7 +70,7 @@ class Decoder(nn.Module):
         self.hidden_cell = (torch.zeros(1,batch_size,hidden_dim),
                             torch.zeros(1,batch_size,hidden_dim))
     
-    def forward(self, z, stroke): 
+    def forward(self, z, stroke):
         """
         Parameters:
             z - Tensor of size  (batch_size, latent_dim), with latent vector samples.
@@ -81,7 +81,9 @@ class Decoder(nn.Module):
         Returns:
             Tensor of size (N_max, batch_size, stroke dim), as the next stroke
         """
-    
+
+        # make sure batch_size carries over
+
         x = torch.cat((z,stroke),dim = 1).view(1,batch_size,input_dim)
 
         out, self.hidden_cell = self.lstm(x,self.hidden_cell)

@@ -29,8 +29,10 @@ data_path = 'ambulance.npz'
 dataset = np.load(data_path, encoding='latin1', allow_pickle=True)
 data = dataset["train"]
 
-lr = 2e-10 # Used to be 2e-3 but got NaN gradients
-batch_size = 128
+# TODO: Solve NaN gradients problem
+
+lr = 2e-3 # Used to be 2e-3 but got NaN gradients
+batch_size = 15 # modification here requires modification in decoder_lstm.py
 latent_dim = 128
 n_epochs = 20
 Nmax = max([len(i) for i in data])
@@ -216,8 +218,8 @@ class VAE(nn.Module):
         std = torch.exp(logvar/2) # logvar / 2 should be a float
         z = mean + std*sample
 
-        if torch.isnan(z)[0, 0]: # debug code
-            print()
+        # if torch.isnan(z)[0, 0]: # debug code
+        #     print() # put a breakpoint here - will let you view variables in the case gradient becomes NaN
 
         # Code from old run_decoder method
 
@@ -233,7 +235,7 @@ class VAE(nn.Module):
 
 
         # Obtain initial hidden and cell states by splitting result of fc_in along column axis
-        self.decoder.hidden_cell = torch.split(F.tanh(self.decoder.fc_in(z).view(1,latent_dim,2*dec_hidden_dim)),
+        self.decoder.hidden_cell = torch.split(F.tanh(self.decoder.fc_in(z).view(1,batch_size,2*dec_hidden_dim)),
                                           [dec_hidden_dim, dec_hidden_dim],
                                           dim = 2)
         pen_loss = 0
@@ -259,8 +261,6 @@ class VAE(nn.Module):
             offset_loss += reconstruction_loss(dx[i], dy[i], *(params[:-1]), mask[i])
 
             print(f"Loss at step {i}: {pen_loss + offset_loss}")
-
-            # TODO: fix the following block
 
             #for strokes in generated sequence past sequence length, set to [0,0,0,0,1]
             stroke_mask = (i > N_s) # boolean mask set to false when i is larger than sketch size
@@ -354,6 +354,10 @@ def train():
     total_loss = 0
     for epoch in range(n_epochs):
         batch, lengths = make_batch(batch_size)
+
+        model.encoder_optimizer.zero_grad()
+        model.decoder_optimizer.zero_grad()
+
         # Run predictions - [n * batch * 5] fed in, similar shape should come out
         output, l_r, mean, logvar = model(batch)
 
@@ -381,10 +385,10 @@ def train():
         model.encoder_optimizer.step()
         model.decoder_optimizer.step()
 
-        model.encoder_optimizer.zero_grad()
-        model.decoder_optimizer.zero_grad()
-
         print(f"Epoch: {epoch + 1}, Loss: {loss.item()}")
+
+        # print(model.encoder_optimizer.param_groups) # More Debug Code 
+
         print("---------------------------------------------------------")
 
         if n_epochs % 5 == 0:
