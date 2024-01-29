@@ -338,7 +338,7 @@ def train():
             loss = l_r + w_kl * l_kl # had an incident w/ epoch 3 having over 1k loss - investigate?
 
         print(f"Epoch: {epoch + 1}, Loss: {loss.item()}\n")
-        print(f"l_kl: {l_kl:.4f}\n l_s: {l_s:.4f}\n l_r: {l_p:.4f}\n")     
+        print(f"l_kl: {l_kl:.4f}\n l_s: {l_s:.4f}\n l_p: {l_p:.4f}\n")     
         
         print("Backpropagating error...")
         loss.backward()
