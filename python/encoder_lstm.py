@@ -10,31 +10,16 @@ from sklearn.preprocessing import MinMaxScaler
 import seaborn as sns
 
 from encode_pen_state import encode_dataset1
+from params import enc_hidden_dim,batch_size,stroke_dim,latent_dim,data,Nmax
 
-# Get file path for one class of sketches
-# data_path = '/kaggle/input/tinyquickdraw/sketches/sketches/whale.npz'
-#for debugging purposes, comment the above line and decomment the below line
-data_path = 'ambulance.npz'
-
-
-# Load from file
-dataset = np.load(data_path, encoding='latin1', allow_pickle=True)
-data = dataset["train"]
-
-lr = 2e-3
-hidden_dim = 2048
-latent_dim = 128
-num_features = 5 # will change to 5 with pen state encoding
-batch_size = 100
-Nmax = max([len(i) for i in data])
 #
 class Encoder(nn.Module):
     def __init__(self):
         super(Encoder, self).__init__()
-        self.lstm = nn.LSTM(num_features, hidden_dim, bidirectional=True)
+        self.lstm = nn.LSTM(stroke_dim, enc_hidden_dim, bidirectional=True)
 
-        self.fc_mu = nn.Linear(2*hidden_dim, latent_dim)
-        self.fc_sigma = nn.Linear(2*hidden_dim, latent_dim)
+        self.fc_mu = nn.Linear(2*enc_hidden_dim, latent_dim)
+        self.fc_sigma = nn.Linear(2*enc_hidden_dim, latent_dim)
 
     def forward(self, x):
         """
@@ -53,7 +38,7 @@ class Encoder(nn.Module):
         """
 
         # Get the hidden states
-        hidden, cell = torch.zeros(2, x.shape[1], hidden_dim), torch.zeros(2, x.shape[1], hidden_dim)
+        hidden, cell = torch.zeros(2, x.shape[1], enc_hidden_dim), torch.zeros(2, x.shape[1], enc_hidden_dim)
 
         _, (hidden, cell) = self.lstm(x.float(), (hidden, cell))
         hidden_forward_dir, hidden_backward_dir = torch.split(hidden, 1, 0)

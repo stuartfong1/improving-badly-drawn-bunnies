@@ -18,28 +18,12 @@ from encode_pen_state import encode_dataset1
 from SketchesDataset import SketchesDataset
 from encoder_lstm import Encoder
 from pen_reconstruction_loss import pen_reconstruction_loss
+from offset_reconstruction_loss import offset_reconstruction_loss
 
-
-
-# Get file path for one class of sketches
-# data_path = '/kaggle/input/tinyquickdraw/sketches/sketches/whale.npz'
-data_path = 'ambulance.npz'
-
-# Load from file
-dataset = np.load(data_path, encoding='latin1', allow_pickle=True)
-data = dataset["train"]
+# import parameters
+from params import *
 
 # TODO: Solve NaN gradients problem
-
-lr = 2e-3 # Used to be 2e-3 but got NaN gradients
-batch_size = 50 # modification here requires modification in decoder_lstm.py
-latent_dim = 128
-n_epochs = 20
-Nmax = max([len(i) for i in data])
-w_kl = 0.5 # weight for loss calculation, can be tuned if needed
-anneal_loss = False # True if train using annealed kl loss, False otherwise
-dec_hidden_dim = 2048 # dimension of cell and hidden states
-
 
 # Taken from pruning.py
 def graph_values():
@@ -255,19 +239,19 @@ class VAE(nn.Module):
             # calculate loss at each timestep
 
             #params[6] is pen_state, input_stroke is the input data
-            pen_loss += pen_reconstruction_loss(batch_size,Nmax,input_stroke[:,2:],params[6])
+            pen_loss += pen_reconstruction_loss(Nmax,input_stroke[:,2:],params[6])/Nmax
             # size of dx and mu_x (and dy and mu_y) do not match.
 
-            offset_params = [params[i].view(batch_size,M) for i in range(0,6)]
+            offset_params = [params[i].view(batch_size,M) for i in range(6)]
 
-            offset_loss += reconstruction_loss(
+            offset_loss += offset_reconstruction_loss(
                 dx[i].view(batch_size,1),
                 dy[i].view(batch_size,1),
                 *offset_params,
                 mask[i].view(batch_size,1)
-            )
+            )/Nmax
 
-            print(f"Loss at step {i}: {pen_loss.item()},  {offset_loss.item()}")
+            print(f"Loss at step {i} (offset,pen): {offset_loss.item()}, {pen_loss.item()}")
 
             #for strokes in generated sequence past sequence length, set to [0,0,0,0,1]
             stroke_mask = (i > N_s) # boolean mask set to false when i is larger than sketch size
@@ -278,37 +262,11 @@ class VAE(nn.Module):
                     empty_stroke = torch.tensor([0,0,0,0,1],dtype=torch.float32)
                     strokes[i,index,:] = empty_stroke
 
-        print("Offset reconstruction loss: " + str(offset_loss.item()))
-        print("Pen state reconstruction loss: " + str(pen_loss.item()))
-        #MAKE SURE TO IGNORE THE FIRST STROKE AFTER THIS IS DONE
+        L_r = (offset_loss + pen_loss)
+        print("Total reconstruction loss", (L_r).item())
 
-        print("Total loss", (offset_loss + pen_loss).item())
+        return strokes[1:], L_r, mean, logvar
 
-        return strokes[1:], offset_loss + pen_loss, mean, logvar
-
-
-# Taken from strokes_reconstruction_loss.py
-def bivariate_normal_pdf(dx, dy, mu_x, mu_y, std_x, std_y, corr_xy):
-    """
-    Return N(dx, dy | mu_x, mu_y, std_x, std_y, corr_xy)
-    """
-    z_x = (dx - mu_x) / std_x
-    z_y = (dy - mu_y) / std_y
-    exponent = -(z_x ** 2 - 2 * corr_xy * z_x * z_y + z_y ** 2) / (2 * (1 - corr_xy ** 2))
-    norm = 1 / (2 * np.pi * std_x * std_y * torch.sqrt(1-corr_xy ** 2))
-    return norm * torch.exp(exponent)
-
-
-# Taken from strokes_reconstruction_loss.py
-def reconstruction_loss(dx, dy, pi, mu_x, mu_y, std_x, std_y, corr_xy, mask):
-    """
-    pi: The mixture probabilities
-    mask: 1 if the point is not after the final stroke, 0 otherwise
-
-    Returns the reconstruction loss for the strokes, L_s
-    """
-    pdf = bivariate_normal_pdf(dx, dy, mu_x, mu_y, std_x, std_y, corr_xy)
-    return -(1/(Nmax * batch_size)) * torch.sum(mask * torch.log(1e-5 + torch.sum(pi*pdf,axis=1).view(150,1)))  # mask is size 150, torch.log(...) is size 10
 
 
 # Taken from KL_loss.py
@@ -379,7 +337,6 @@ def train():
             loss = anneal_kl_loss(20, l_r, l_kl)
         else:
             loss = l_r + w_kl * l_kl # had an incident w/ epoch 3 having over 1k loss - investigate?
-            print("KL Loss: " + l_kl)
 
         loss.backward()
 

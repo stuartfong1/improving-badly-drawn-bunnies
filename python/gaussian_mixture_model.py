@@ -2,8 +2,9 @@ import numpy as np
 import torch
 from torch import nn
 import torch.nn.functional as F
+from params import batch_size
 
-def gaussian_mixture_model(batch_size, mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy):
+def gaussian_mixture_model(mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy):
     """
     Input:
         mixture_weights: Mixture weights (probability of a point being in distribution i)
@@ -36,8 +37,8 @@ def gaussian_mixture_model(batch_size, mixture_weights, mean_x, mean_y, std_x, s
     offset_y = mean_y + std_y * (corr_xy * offset_x + torch.sqrt(1 - corr_xy ** 2) * rand_y)
     return offset_x.unsqueeze(0), offset_y.unsqueeze(0)
 
-def sample(batch_size, mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy, pen_state):
-    offset_x, offset_y = gaussian_mixture_model(batch_size, mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy)
+def sample(mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy, pen_state):
+    offset_x, offset_y = gaussian_mixture_model(mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy)
     
     pen_state = pen_state.squeeze()
     pen_state = torch.searchsorted(pen_state.cumsum(1), torch.rand(batch_size, 1)).squeeze()
