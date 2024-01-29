@@ -251,7 +251,7 @@ class VAE(nn.Module):
                 mask[i].view(batch_size,1)
             )/Nmax
 
-            print(f"Loss at step {i} (offset,pen): {offset_loss.item()}, {pen_loss.item()}")
+            #print(f"Loss at step {i} (offset,pen): {offset_loss.item()}, {pen_loss.item()}")
 
             #for strokes in generated sequence past sequence length, set to [0,0,0,0,1]
             stroke_mask = (i > N_s) # boolean mask set to false when i is larger than sketch size
@@ -261,11 +261,8 @@ class VAE(nn.Module):
                 if stroke_mask[index] == True:
                     empty_stroke = torch.tensor([0,0,0,0,1],dtype=torch.float32)
                     strokes[i,index,:] = empty_stroke
-
-        L_r = (offset_loss + pen_loss)
-        print("Total reconstruction loss", (L_r).item())
-
-        return strokes[1:], L_r, mean, logvar
+    
+        return strokes[1:], offset_loss,pen_loss, mean, logvar
 
 
 
@@ -313,6 +310,8 @@ def make_target(batch, lengths):
 
 
 def train():
+    print("Training loop running...\n")
+    
     cur_step = 0
     total_loss = 0
     for epoch in range(n_epochs):
@@ -322,14 +321,14 @@ def train():
         model.decoder_optimizer.zero_grad()
 
         # Run predictions - [n * batch * 5] fed in, similar shape should come out
-        output, l_r, mean, logvar = model(batch)
+        output, l_s,l_p, mean, logvar = model(batch)
 
         #pen_state = torch.Tensor(params[-1]).squeeze()
         #mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy = torch.stack(params[:-1], 1).squeeze(0)
-
-        w_kl = 0.5 # weight for loss calculation, can be tuned if needed
+        
+        l_r = l_s+l_p
         l_kl = kl_loss(logvar, mean)
-
+    
         # get the total loss from the model forward(), add it to our kl
 
         if anneal_loss:
@@ -338,8 +337,12 @@ def train():
         else:
             loss = l_r + w_kl * l_kl # had an incident w/ epoch 3 having over 1k loss - investigate?
 
+        print(f"Epoch: {epoch + 1}, Loss: {loss.item()}\n")
+        print(f"l_kl: {l_kl:.4f}\n l_s: {l_s:.4f}\n l_r: {l_p:.4f}\n")     
+        
+        print("Backpropagating error...")
         loss.backward()
-
+        
         grad_threshold = 1.0 # tunable parameter, prevents exploding gradient
         nn.utils.clip_grad_norm_(model.encoder.parameters(), grad_threshold)
         nn.utils.clip_grad_norm_(model.decoder.parameters(), grad_threshold)
@@ -348,10 +351,8 @@ def train():
         model.encoder_optimizer.step()
         model.decoder_optimizer.step()
 
-        print(f"Epoch: {epoch + 1}, Loss: {loss.item()}")
-
         # print(model.encoder_optimizer.param_groups) # More Debug Code 
-
+        print("Done!")
         print("---------------------------------------------------------")
         #
         # if n_epochs % 5 == 0:
