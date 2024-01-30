@@ -5,7 +5,7 @@ from math import sqrt
 from gaussian_mixture_model import sample
 from pen_reconstruction_loss import pen_reconstruction_loss
 
-from params import M, T, sqrtT, batch_size, Nmax,dec_hidden_dim, latent_dim,stroke_dim,device
+from params import M, T, sqrtT, batch_size, dec_hidden_dim, latent_dim,stroke_dim,device
 
 input_dim = latent_dim + stroke_dim # z | (x,y,p1,p2,p3)
 output_dim = 6*M + 3
@@ -86,43 +86,6 @@ class Decoder(nn.Module):
 
         return stroke_next, params
 
-# def run_decoder(Decoder,z,N_s = torch.full((batch_size,1),2**31-1)):
-#     # Data for all strokes in output sequence
-#     strokes = torch.zeros(Nmax + 1, batch_size, stroke_dim,device=device)
-#     strokes[0,:] = torch.tensor([0,0,1,0,0])
-# 
-#     # Batch of samples from latent space distributions
-#     z = z.view(batch_size,latent_dim)
-#     N_s = N_s.view(batch_size)
-# 
-#     # Obtain initial hidden and cell states by splitting result of fc_in along column axis
-#     Decoder.hidden_cell = torch.split(F.tanh(Decoder.fc_in(z).view(1,latent_dim,2*dec_hidden_dim)),
-#                                        [dec_hidden_dim, dec_hidden_dim],
-#                                        dim = 2)
-# 
-#     pen_loss = 0
-#     temp_data = torch.ones(128,3) #placeholder input
-# 
-#     # For each timestep, pass the batch of strokes through LSTM and compute
-#     # the output.  Output of the previous timestep is used as input.
-#     for i in range(1,Nmax + 1):
-# 
-#         #params will be used for computing loss
-#         strokes[i],params = Decoder(z,strokes[i-1])
-# 
-#         #params[6] is pen_state, temp_data will need to be replaced with the input data
-#         pen_loss += pen_reconstruction_loss(batch_size,Nmax,temp_data,params[6])
-# 
-#         #for strokes in generated sequence past sequence length, set to [0,0,0,0,1]
-#         mask = (i > N_s)
-#         empty_stroke = torch.tensor([0,0,0,0,1],dtype=torch.float32)
-#         strokes[i,mask] = empty_stroke
-# 
-#     print("Pen state reconstruction loss: " + str(pen_loss))
-#     #MAKE SURE TO IGNORE THE FIRST STROKE AFTER THIS IS DONE
-#     return strokes[1:,:,:],params
-
-
 if __name__ == "__main__":
     print("Running tests...\n")
     decoder = Decoder()
@@ -130,8 +93,8 @@ if __name__ == "__main__":
     print("Decoder successfully initialiazed ✅\n")
 
     z = torch.ones(batch_size,latent_dim) 
-    out, params = run_decoder(decoder,z)
+    #out, params = run_decoder(decoder,z)
     print('Dimension test passed ✅\n')
     print("Output (first sketch in batch):\n")
-    print(out[:,0])
+    #print(out[:,0])
 

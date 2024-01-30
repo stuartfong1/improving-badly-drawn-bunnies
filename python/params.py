@@ -9,7 +9,7 @@ stroke_dim = 5
 
 # decoder 
 M = 10 # number of normal distributions for output 
-T = 0.999 # temperature parameter
+T = 0.1# temperature parameter
 sqrtT = sqrt(T) # saves computation
 dec_hidden_dim = 2048 # dimension of cell and hidden states
 
@@ -21,11 +21,11 @@ enc_hidden_dim = 2048 # dimension of cell and hidden states
 lr = 2e-3 # Used to be 2e-3 but got NaN gradients
 batch_size = 128 # modification here requires modification in decoder_lstm.py
 latent_dim = 128
-n_epochs = 100
-w_kl = 0.5 # weight for loss calculation, can be tuned if needed
+n_epochs = 150
+w_kl = 0.7 # weight for loss calculation, can be tuned if needed
 anneal_loss = False # True if train using annealed kl loss, False otherwise
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
+pretrained = True
 # --------- DATA LOADING -----------------
 
 # Get file path for one class of sketches
