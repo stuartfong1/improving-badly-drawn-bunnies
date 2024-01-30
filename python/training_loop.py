@@ -14,9 +14,10 @@ from tqdm.auto import tqdm
 
 # import from other files
 from decoder_lstm import Decoder, M
-from encode_pen_state import encode_dataset1
+from encode_pen_state import encode_dataset2
 from SketchesDataset import SketchesDataset
 from encoder_lstm import Encoder
+from encoder_lstm import make_batch
 from pen_reconstruction_loss import pen_reconstruction_loss
 from offset_reconstruction_loss import offset_reconstruction_loss
 
@@ -98,40 +99,41 @@ def prune_data(data, num_std=2.5):
     print(f"Number of images after pruning: {np.size(data)}")
 
 
-# Taken from encoder_lstm.py
-def make_batch(size=batch_size):
-    """
-    Using the data created earlier in the code and a given batch size, randomly fetch
-    that many images and return them + their lengths.
+# # Taken from encoder_lstm.py
+# def make_batch(size=batch_size):
+#     """
+#     Using the data created earlier in the code and a given batch size, randomly fetch
+#     that many images and return them + their lengths.
 
-    Parameters:
-        - size: the size of the batch. Default is the variable batch_size declared
-            at the start of the code.
+#     Parameters:
+#         - size: the size of the batch. Default is the variable batch_size declared
+#             at the start of the code.
 
-    Returns:
-        - batch: a tensor of the batch of random images appended in the order they were fetched in.
-        - lengths: the length of each image fetched, in the order they were fetched in.
-    """
+#     Returns:
+#         - batch: a tensor of the batch of random images appended in the order they were fetched in.
+#         - lengths: the length of each image fetched, in the order they were fetched in.
+#     """
 
-    batch_ids = np.random.choice(len(data), size)
-    batch_images = [data[id] for id in batch_ids]
-    lengths = [len(image) for image in batch_images]
-    strokes = []
-    for image in batch_images:
-        new_image = np.zeros((Nmax, 3))
-        new_image[:len(image), :] = image[:len(image), :] # copy over values
-        new_image[len(image):, :2] = 1 # set leftover empty coordinates to 1 to indicate end
-        strokes.append(new_image)
+#     batch_ids = np.random.choice(len(data), size)
+#     batch_images = [data[id] for id in batch_ids]
+#     lengths = [len(image) for image in batch_images]
+#     strokes = []
+#     for image in batch_images:
+#         new_image = np.zeros((Nmax, 3))
+#         new_image[:len(image), :] = image[:len(image), :] # copy over values
+#         new_image[len(image):, 2] = 1 # set leftover empty coordinates to 1 to indicate end
+#         strokes.append(new_image)
 
-    encoded_strokes = np.stack(encode_dataset1(np.array(strokes)), 1) # don't forget to stack input along dim = 1
-    batch = torch.from_numpy(encoded_strokes.astype(float))
-    return batch, lengths
+#     encoded_strokes = np.stack(encode_dataset2(np.array(strokes),lengths), 1) # don't forget to stack input along dim = 1
+#     batch = torch.from_numpy(encoded_strokes.astype(float))
+#     return batch, lengths
 
 
 # Original function taken from normalize_data.py
 def normalize_data():
 
     total_length = 0
+    
 
     for element in data:
         total_length += (len(element))
@@ -197,36 +199,37 @@ class VAE(nn.Module):
 
     def forward(self, x, N_s = torch.full((batch_size,1),Nmax)):
         mean, logvar = self.encoder(x)
-
-        sample = torch.randn(batch_size, latent_dim)
+        
+        sample = torch.randn(batch_size, latent_dim,device = device)
         std = torch.exp(logvar/2) # logvar / 2 should be a float
         z = mean + std*sample
 
-        # if torch.isnan(z)[0, 0]: # debug code
-        #     print() # put a breakpoint here - will let you view variables in the case gradient becomes NaN
+        if torch.isnan(z)[0, 0]: # debug code
+             print() # put a breakpoint here - will let you view variables in the case gradient becomes NaN
 
         # Code from old run_decoder method
 
         # Data for all strokes in output sequence
-        strokes = torch.zeros(Nmax + 1, batch_size, 5)
+        strokes = torch.zeros(Nmax + 1, batch_size, 5,device=device)
         strokes[0,:] = torch.tensor([0,0,1,0,0])
 
         # Batch of samples from latent space distributions
         z = z.view(batch_size,latent_dim)
 
-        #THIS IS ONLY A PLACEHOLDER SKETCH LENGTH.  IT MUST NOT BE Nmax FOR THE FINAL MODEL
-        # replace with equivalent of lengths array
-
-
         # Obtain initial hidden and cell states by splitting result of fc_in along column axis
-        self.decoder.hidden_cell = torch.split(F.tanh(self.decoder.fc_in(z).view(1,batch_size,2*dec_hidden_dim)),
-                                          [dec_hidden_dim, dec_hidden_dim],
-                                          dim = 2)
+        self.decoder.hidden_cell = torch.split(
+            F.tanh(self.decoder.fc_in(z).view(1,batch_size,2*dec_hidden_dim)),
+            [dec_hidden_dim, dec_hidden_dim],
+            dim = 2)
+        
         pen_loss = 0
         offset_loss = 0
 
         mask, dx, dy, p = make_target(x, N_s)
 
+        # used when loop goes beyond input sketch length
+        empty_stroke = torch.tensor([0,0,0,0,1],dtype=torch.float32,device=device)
+        
         # For each timestep, pass the batch of strokes through LSTM and compute
         # the output.  Output of the previous timestep is used as input.
         for i in range(1,Nmax):
@@ -256,13 +259,10 @@ class VAE(nn.Module):
             #for strokes in generated sequence past sequence length, set to [0,0,0,0,1]
             stroke_mask = (i > N_s) # boolean mask set to false when i is larger than sketch size
 
-            for index in range(len(stroke_mask)):
-                # stroke_mask[0] = True # Debug Code
-                if stroke_mask[index] == True:
-                    empty_stroke = torch.tensor([0,0,0,0,1],dtype=torch.float32)
-                    strokes[i,index,:] = empty_stroke
+            
+            strokes[i,stroke_mask.squeeze(),:] = empty_stroke
     
-        return strokes[1:], offset_loss,pen_loss, mean, logvar
+        return strokes[1:], offset_loss, pen_loss, mean, logvar
 
 
 
@@ -278,7 +278,6 @@ def anneal_kl_loss(num_training_steps, reconstruction_loss, kl_loss):
     n_min = 0.01  # Starting Value from paper
     R = 0.9995  # R is a term close to but less than 1.
     KL_min = 0.1 # Value from paper (needs to be between 0.1 and 0.5)
-    w_KL = 1.0  # Weight for the KL divergence part of the loss (can tune as needed, 1.0 is standard)
 
     # Initialize
     n_step = n_min
@@ -290,24 +289,24 @@ def anneal_kl_loss(num_training_steps, reconstruction_loss, kl_loss):
         n_step = 1 - (1 - n_min) * R**step
 
         # Calculate the total weighted loss
-        step_loss = reconstruction_loss + w_KL * n_step * max(kl_loss, KL_min)
+        step_loss = reconstruction_loss + w_kl * n_step * max(kl_loss, KL_min)
         total_loss += step_loss
 
     return total_loss
 
 
 def make_target(batch, lengths):
-    mask = torch.zeros((Nmax + 1, batch.size()[1]))
-    for index, num_strokes in enumerate(lengths):
-        mask[:num_strokes, index] = 1
+    with torch.device(device):
+        mask = torch.zeros((Nmax + 1, batch.size()[1]))
+        for index, num_strokes in enumerate(lengths):
+            mask[:num_strokes, index] = 1
 
-    dx = batch[:, :, 0]
-    dy = batch[:, :, 1]
-    # copy + append together pen state values
-    p = torch.stack([batch.data[:, :, 2], batch.data[:, :, 3], batch.data[:, :, 4]], 2)
+        dx = batch[:, :, 0]
+        dy = batch[:, :, 1]
+        # copy + append together pen state values
+        p = torch.stack([batch.data[:, :, 2], batch.data[:, :, 3], batch.data[:, :, 4]], 2)
 
-    return mask, dx, dy, p
-
+        return mask, dx, dy, p
 
 def train():
     print("Training loop running...\n")
@@ -316,18 +315,22 @@ def train():
     total_loss = 0
     for epoch in range(n_epochs):
         batch, lengths = make_batch(batch_size)
+        
+        batch = batch.to(device)
+        lengths = lengths.to(device)
 
         model.encoder_optimizer.zero_grad()
         model.decoder_optimizer.zero_grad()
 
+        
         # Run predictions - [n * batch * 5] fed in, similar shape should come out
-        output, l_s,l_p, mean, logvar = model(batch)
+        output, l_s,l_p, mean, logvar = model(batch,lengths)
 
         #pen_state = torch.Tensor(params[-1]).squeeze()
         #mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy = torch.stack(params[:-1], 1).squeeze(0)
         
         l_r = l_s+l_p
-        l_kl = kl_loss(logvar, mean)
+        l_kl = kl_loss(mean, logvar)
     
         # get the total loss from the model forward(), add it to our kl
 
@@ -336,11 +339,7 @@ def train():
             loss = anneal_kl_loss(20, l_r, l_kl)
         else:
             loss = l_r + w_kl * l_kl # had an incident w/ epoch 3 having over 1k loss - investigate?
-
-        print(f"Epoch: {epoch + 1}, Loss: {loss.item()}\n")
-        print(f"l_kl: {l_kl:.4f}\n l_s: {l_s:.4f}\n l_p: {l_p:.4f}\n")     
         
-        print("Backpropagating error...")
         loss.backward()
         
         grad_threshold = 1.0 # tunable parameter, prevents exploding gradient
@@ -352,16 +351,16 @@ def train():
         model.decoder_optimizer.step()
 
         # print(model.encoder_optimizer.param_groups) # More Debug Code 
-        print("Done!")
-        print("---------------------------------------------------------")
-        #
-        # if n_epochs % 5 == 0:
-        #     # draw image
-        #     display_encoded_image(output[:, np.random.randint(batch_size), :])
+        print(f"Epoch: {epoch + 1}, Loss: {loss.item()}")
+        print(f"l_kl: {l_kl:.4f} l_s: {l_s:.4f} l_p: {l_p:.4f}") 
+        print("---------------------------------------------------------\n")
+        
+        #if epoch % 5 == 0:
+            # draw image
+            #display_encoded_image(output[:, np.random.randint(batch_size), :])
 
 
-
-model = VAE()
 
 if __name__ == "__main__":
+    model = VAE().to(device)
     train()

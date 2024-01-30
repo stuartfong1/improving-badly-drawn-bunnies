@@ -1,6 +1,6 @@
 import numpy as np
 
-def encode_pen_state(sketch):
+def encode_pen_state(sketch,length):
     """
     One-hot encode pen state by adding additional columns for pen up and end of stroke.
     
@@ -15,13 +15,15 @@ def encode_pen_state(sketch):
     shape = sketch.shape
     pen_up = (np.ones(shape[0]) - sketch[:,2]).reshape(shape[0],1)
     end_stroke = np.zeros((shape[0],1))
-    end_stroke[-1] = 1 
+    end_stroke[length:] = 1 
+    pen_up[length:] = 0
+    sketch[:,2][length:] = 0
     sketch[-1][2] = 0
     
     return np.concatenate((sketch,pen_up,end_stroke),axis=1)
 
 
-def encode_dataset1(data):
+def encode_dataset1(data,lengths):
     """
     Encode pen states by creating a new array of sketch data.
     
@@ -35,12 +37,12 @@ def encode_dataset1(data):
     new_data = np.empty((data.shape[0], data.shape[1], 5), dtype=object)
 
     for i, sketch in enumerate(data):
-        new_data[i] = encode_pen_state(sketch) 
+        new_data[i] = encode_pen_state(sketch,lengths[i])
 
     return new_data
 
 
-def encode_dataset2(data):
+def encode_dataset2(data,lengths):
     """
     Encode pen states by modifying original dataset.
     
@@ -51,6 +53,6 @@ def encode_dataset2(data):
         None
     """
     for i, sketch in enumerate(data):
-        data[i] = encode_pen_state(sketch) 
+        data[i] = encode_pen_state(sketch,lengths[i]) 
     return
 

@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 from math import sqrt
 
 # --------- VAE PARAMETERS --------------
@@ -8,7 +9,7 @@ stroke_dim = 5
 
 # decoder 
 M = 10 # number of normal distributions for output 
-T = 0.5 # temperature parameter
+T = 0.999 # temperature parameter
 sqrtT = sqrt(T) # saves computation
 dec_hidden_dim = 2048 # dimension of cell and hidden states
 
@@ -18,11 +19,12 @@ enc_hidden_dim = 2048 # dimension of cell and hidden states
 # --------- TRAINING PARAMETERS ----------
 
 lr = 2e-3 # Used to be 2e-3 but got NaN gradients
-batch_size = 50 # modification here requires modification in decoder_lstm.py
+batch_size = 128 # modification here requires modification in decoder_lstm.py
 latent_dim = 128
-n_epochs = 20
+n_epochs = 100
 w_kl = 0.5 # weight for loss calculation, can be tuned if needed
 anneal_loss = False # True if train using annealed kl loss, False otherwise
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # --------- DATA LOADING -----------------
 
