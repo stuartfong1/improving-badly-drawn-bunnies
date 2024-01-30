@@ -22,7 +22,7 @@
 
 import numpy as np
 import torch
-from params import batch_size,M
+from params import batch_size,M, Nmax
 
 def bivariate_normal_pdf(dx, dy, mu_x, mu_y, std_x, std_y, corr_xy):
     """
@@ -44,7 +44,7 @@ def offset_reconstruction_loss(dx, dy, pi, mu_x, mu_y, std_x, std_y, corr_xy, ma
     """
     pdf = bivariate_normal_pdf(dx, dy, mu_x, mu_y, std_x, std_y, corr_xy)
     
-    return -(1/batch_size) *torch.sum(mask * torch.log(1e-5 + torch.sum(pi*pdf,axis=1).view(batch_size,1)))  
+    return -(1/(batch_size*Nmax)) *torch.sum(mask * torch.log(1e-3 + torch.sum(pi*pdf,axis=1).view(batch_size,1)))  
 
 
 
