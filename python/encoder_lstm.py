@@ -10,7 +10,7 @@ from sklearn.preprocessing import MinMaxScaler
 import seaborn as sns
 
 from encode_pen_state import encode_dataset1
-from params import enc_hidden_dim,batch_size,stroke_dim,latent_dim,data,Nmax
+from params import enc_hidden_dim,batch_size,stroke_dim,latent_dim,data,Nmax,device
 
 #
 class Encoder(nn.Module):
@@ -38,7 +38,7 @@ class Encoder(nn.Module):
         """
 
         # Get the hidden states
-        hidden, cell = torch.zeros(2, x.shape[1], enc_hidden_dim), torch.zeros(2, x.shape[1], enc_hidden_dim)
+        hidden, cell = torch.zeros(2, x.shape[1], enc_hidden_dim,device=device), torch.zeros(2, x.shape[1], enc_hidden_dim,device=device)
 
         _, (hidden, cell) = self.lstm(x.float(), (hidden, cell))
         hidden_forward_dir, hidden_backward_dir = torch.split(hidden, 1, 0)
@@ -72,12 +72,12 @@ def make_batch(size=batch_size):
     for image in batch_images:
         new_image = np.zeros((Nmax, 3))
         new_image[:len(image), :] = image[:len(image), :] # copy over values
-        new_image[len(image):, :2] = 1 # set leftover empty coordinates to 1 to indicate end
+        new_image[len(image):, 2] = 1 # set leftover empty coordinates to 1 to indicate end
         strokes.append(new_image)
 
-    encoded_strokes = np.stack(encode_dataset1(np.array(strokes)), 1) # don't forget to stack input along dim = 1
+    encoded_strokes = np.stack(encode_dataset1(np.array(strokes),lengths), 1) # don't forget to stack input along dim = 1
     batch = torch.from_numpy(encoded_strokes.astype(float))
-    return batch, lengths
+    return batch, torch.tensor(lengths)
 
 
 def train():
