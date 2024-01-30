@@ -23,7 +23,7 @@ from normalize_data import normalize_data
 # import parameters
 from params import *
 
-# TODO: Solve NaN gradients problem
+# TODO: Solve y = x problem
 
 # # Taken from encoder_lstm.py
 def make_batch(size=batch_size):
@@ -137,9 +137,26 @@ def train():
     
         # get the total loss from the model forward(), add it to our kl
 
+        loss = 0
+
         if anneal_loss:
             # the first parameter is num_training_steps, which is tunable
-            loss = anneal_kl_loss(20, l_r, l_kl)
+            # loss = anneal_kl_loss(20, l_r, l_kl)
+
+            # Hyperparameters
+            n_min = 0.01  # Starting Value from paper
+            R = 0.9995  # R is a term close to but less than 1.
+            KL_min = 0.1 # Value from paper (needs to be between 0.1 and 0.5)
+
+            # Initialize
+            n_step = n_min
+
+            # Calculate n_step
+            n_step = 1 - (1 - n_min) * R**epoch
+
+            # Calculate the total weighted loss
+            step_loss = l_r + w_kl * n_step * max(l_kl, KL_min)
+            loss += step_loss
         else:
             loss = l_r + w_kl * l_kl # had an incident w/ epoch 3 having over 1k loss - investigate?
         
@@ -157,13 +174,13 @@ def train():
         print(f"l_kl: {l_kl:.4f} l_s: {l_s:.4f} l_p: {l_p:.4f}") 
         print("---------------------------------------------------------\n")
         
-        if epoch % 5 == 0:
-            save_model()
+        # if epoch % 5 == 0:
+        #     save_model()
         
-        #if epoch % 5 == 0:
-        #    #draw image
-        #    display_encoded_image(output[:, 0, :])
-        #    display_encoded_image(batch[:, 0, :])
+        if epoch % 5 == 0:
+           #draw image
+           display_encoded_image(output[:, 0, :])
+           display_encoded_image(batch[:, 0, :])
 
 def save_model():
     '''
@@ -191,9 +208,10 @@ if __name__ == "__main__":
     
     model = VAE().to(device)
     optimizer = Adam(model.parameters(), lr = lr)    
-    weights = os.listdir("model/final")
+    # weights = os.listdir("model/final") # directory does not exist on my pc atm, feel free to change
     
     if pretrained and not len(os.listdir("model/final")) == 0:
+        weights = os.listdir("model/final")
         loaded_state = torch.load(f"model/final/{weights[0]}", map_location=device)
         model.load_state_dict(loaded_state['model'])
         optimizer.load_state_dict(loaded_state['opt'])

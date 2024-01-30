@@ -23,15 +23,16 @@ batch_size = 128 # modification here requires modification in decoder_lstm.py
 latent_dim = 128
 n_epochs = 150
 w_kl = 0.7 # weight for loss calculation, can be tuned if needed
-anneal_loss = False # True if train using annealed kl loss, False otherwise
+anneal_loss = True # True if train using annealed kl loss, False otherwise
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-pretrained = True
+pretrained = False
 # --------- DATA LOADING -----------------
 
 # Get file path for one class of sketches
 # data_path = '/kaggle/input/tinyquickdraw/sketches/sketches/whale.npz'
 #for debugging purposes, comment the above line and decomment the below line
-data_path = 'python/ambulance.npz'
+# data_path = 'python/ambulance.npz' # ambulance.npz is stored alongside the files on my computer, feel free to change
+data_path = 'ambulance.npz'
 dataset = np.load(data_path, encoding='latin1', allow_pickle=True)
 data = dataset["train"]
 Nmax = max([len(i) for i in data])
