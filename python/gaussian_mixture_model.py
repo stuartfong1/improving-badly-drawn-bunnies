@@ -18,7 +18,7 @@ def gaussian_mixture_model(mixture_weights, mean_x, mean_y, std_x, std_y, corr_x
         The sampled x and y offsets
     """
     # Choose which distribution to sample from
-    mixture_weights = mixture_weights.squeeze(0, 3).transpose(0, 1).contiguous()
+    mixture_weights = mixture_weights.squeeze().transpose(0, 1).contiguous()
     
     # Index for each batch
     i = torch.searchsorted(mixture_weights.cumsum(0), torch.rand(batch_size, 1)).squeeze()
