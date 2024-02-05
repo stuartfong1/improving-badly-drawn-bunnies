@@ -137,26 +137,19 @@ def train():
     
         # get the total loss from the model forward(), add it to our kl
 
-        loss = 0
-
         if anneal_loss:
-            # the first parameter is num_training_steps, which is tunable
-            # loss = anneal_kl_loss(20, l_r, l_kl)
+            # until dataloader is added, epochs and steps are the same.
 
             # Hyperparameters
             n_min = 0.01  # Starting Value from paper
             R = 0.9995  # R is a term close to but less than 1.
             KL_min = 0.1 # Value from paper (needs to be between 0.1 and 0.5)
 
-            # Initialize
-            n_step = n_min
-
             # Calculate n_step
             n_step = 1 - (1 - n_min) * R**epoch
 
             # Calculate the total weighted loss
-            step_loss = l_r + w_kl * n_step * max(l_kl, KL_min)
-            loss += step_loss
+            loss = l_r + w_kl * n_step * max(l_kl, KL_min)
         else:
             loss = l_r + w_kl * l_kl # had an incident w/ epoch 3 having over 1k loss - investigate?
         
