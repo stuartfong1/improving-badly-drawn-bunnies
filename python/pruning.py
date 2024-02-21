@@ -3,12 +3,6 @@ import matplotlib.pyplot as plt
 from scipy.stats import norm
 import math
 
-# Get file path for one class of sketches
-data_path = '/kaggle/input/tinyquickdraw/sketches/sketches/whale.npz'
-
-# Load from file
-dataset = np.load(data_path, encoding='latin1', allow_pickle=True)
-data = dataset["train"]
 
 def graph_values(data):
     """
@@ -80,5 +74,13 @@ def prune_data(data, num_std=2.5):
     print(f"Number of images after pruning: {np.size(data)}")
 
 if __name__ == "__main__":
+    
+    # Get file path for one class of sketches
+    data_path = '/kaggle/input/tinyquickdraw/sketches/sketches/whale.npz'
+    
+    # Load from file
+    dataset = np.load(data_path, encoding='latin1', allow_pickle=True)
+    data = dataset["train"]
+
     graph_values(data)
     prune_data(data)
