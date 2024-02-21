@@ -10,7 +10,8 @@ __pycache__/
 model/temp
 
 # >:(
-.idea
+.idea/
+
 # Distribution / packaging
 .Python
 build/
