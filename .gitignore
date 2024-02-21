@@ -9,6 +9,8 @@ __pycache__/
 #PyTorch model parameters
 model/temp
 
+# >:(
+.idea
 # Distribution / packaging
 .Python
 build/
