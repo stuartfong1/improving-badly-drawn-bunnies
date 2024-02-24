@@ -1,13 +1,13 @@
-animals.pt:
-    M = 16
-    latent_dim = 96
-    dec_hiddem_dim = 1440
-    enc_hiddem_dim = 1440
-    files = "cat.npz","owl.npz","crab.npz","rabbit.npz","skull.npz"
+owl-lion.pt:
+    M = 20
+    latent_dim = 128
+    dec_hidden_dim = 2048
+    enc_hiddem_dim  512
+    files = "owl.npz", "lion.npz"
 
-applebanana.pt:
-    M = 10
-    latent_dim = 64
-    dec_hiddem_dim = 1024
-    enc_hidden = 1024
+applebanana.pt: ##parameters may be incorrect
+    M = 20
+    latent_dim = 128
+    dec_hidden_dim = 2048
+    enc_hidden_dim  512   
     files = "apple.npz","banana.npz"

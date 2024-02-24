@@ -9,6 +9,7 @@ __pycache__/
 #PyTorch model parameters
 model/temp
 
+model_hyperlstm.ipynb
 # >:(
 .idea/
 
