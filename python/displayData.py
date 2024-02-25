@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from encode_pen_state import encode_dataset1
-from encoder_lstm import make_batch
+from python.data_processing import encode_dataset1
+from python.encoder import make_batch
 
 # Get file path for one class of sketches
 data_path = '/kaggle/input/tinyquickdraw/sketches/sketches/whale.npz'
