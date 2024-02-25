@@ -11,3 +11,12 @@ applebanana.pt: ##parameters may be incorrect
     dec_hidden_dim = 2048
     enc_hidden_dim  512   
     files = "apple.npz","banana.npz"
+    
+fruit.pt:
+	M = 20
+	latent_dim = 128
+	dec_hidden_dim = 2048
+	end_hidden_dim = 512
+	dec_hyper_dim = 64
+	feature_dim = 32
+	files = "apple.npz","flower.npz","cactus.npz","carrot.npz"
