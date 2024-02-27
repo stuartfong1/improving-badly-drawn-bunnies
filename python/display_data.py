@@ -1,11 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from arrayStuff import my_array
 
-def display():
+def display(my_array):
+    my_array = np.array(my_array)
     #Xplot and Yplot are array of points that will be plotted
-    Xplot = [0]
-    Yplot = [0]
+    Xplot = []
+    Yplot = []
     #Keeps track of the current point that is being drawn
     xpos = 0
     ypos = 0
@@ -22,5 +22,3 @@ def display():
             Yplot = []
         i+=1
     plt.show()
-    
-display()

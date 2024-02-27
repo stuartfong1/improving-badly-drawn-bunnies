@@ -4,6 +4,9 @@ import numpy as np
 import math
 from rdp import rdp
 
+from demo_model import run_model
+from display_data import display
+
 #Epsilon for rdp
 scaling = 0.4
 
@@ -50,7 +53,8 @@ canvas.bind('<B1-Motion>', paint)
 def reset(event):
     global last_x, last_y, connector_line
     # Indicate the pen lift without recording a movement
-    drawing_data.append([0, 0, 1])
+    drawing_data[-1][2] = 1
+    # drawing_data.append([0, 0, 1])
     connector_line = False
 
 
@@ -82,9 +86,9 @@ def rdp_keep_rows(array, epsilon=scaling, keep_column=2):
 
 
 # Save function
-def save_image():
+def process_image():
     global drawing_data  # Ensure we're using the global variable
-    filename = "arrayStuff.py"
+    filename = "python/arrayStuff.py"
     
     # Ensure drawing_data is a NumPy array for processing
     np_array = np.array(drawing_data, dtype=int)
@@ -94,23 +98,28 @@ def save_image():
         simplified_array = rdp_keep_rows(np_array, epsilon=scaling)
     else:
         simplified_array = np_array
+
+    result = run_model(simplified_array)
+    display(result)
+
+
     
-    # Format the simplified NumPy array to string for saving
-    formatted_output = '[' + ',\n'.join(['[' + ', '.join(map(str, row)) + ']' for row in simplified_array]) + ']'
-    formatted_output = "import numpy as np\nmy_array = np.array(" + formatted_output + ", dtype=np.int16)"
+    # # Format the simplified NumPy array to string for saving
+    # formatted_output = '[' + ',\n'.join(['[' + ', '.join(map(str, row)) + ']' for row in simplified_array]) + ']'
+    # formatted_output = "import numpy as np\nmy_array = np.array(" + formatted_output + ", dtype=np.int16)"
     
-    # Write the formatted string to the file
-    with open(filename, 'w') as file:
-        file.write(formatted_output)
+    # # Write the formatted string to the file
+    # with open(filename, 'w') as file:
+    #     file.write(formatted_output)
     
-    print(f"Drawing data saved as {filename}")
+    # print(f"Drawing data saved as {filename}")
     
     # Clear the drawing data and the canvas for new drawings
     drawing_data.clear()
     canvas.delete("all")
 
 # Creates a button that runs the save_image function when pressed
-button_save = Button(root, text="Save Drawing", command=save_image)
+button_save = Button(root, text="Save Drawing", command=process_image)
 # Adds the button to the window
 button_save.pack()
 
