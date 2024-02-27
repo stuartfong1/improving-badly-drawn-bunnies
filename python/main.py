@@ -3,6 +3,7 @@ from data_processing import *
 from autoencoder import VAE
 from torch.utils.data import DataLoader
 from torch.optim import Adam
+from training import run_tests
 
 train_dataset = SketchesDataset(
         datasets=datasets,
@@ -22,6 +23,10 @@ model = VAE().to(device)
 optimizer = Adam(model.parameters(), lr = lr) 
 
 load_weights(model,optimizer,"model/final/remote/fruit.pt")   
+
+T = 0.2
+model.generate = True
+run_tests(test_dataloader,model,5)
 
 # INTERPOLATION EXAMPLE
 def latent_lerp(model, S1, S2, nstep):

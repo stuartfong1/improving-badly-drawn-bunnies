@@ -80,10 +80,9 @@ def prune_data(data, num_std=2.5):
     # get final # of images
     print(f"Number of images after pruning: {np.size(data)}")
 
-
 for dataset in datasets:
-  prune_data(dataset["train"],1.5)
-  prune_data(dataset["test"],1.5)
+  prune_data(dataset["train"],3)
+  prune_data(dataset["test"],3)
 
 Nmax = max([
   max([len(i) for i in dataset["train"]] + [len(i) for i in dataset["test"]]) 

@@ -87,6 +87,12 @@ def sample(mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy, pen_state):
     return next_point.transpose(0, 1)
 
 
+#DECODER..
+
+input_dim = latent_dim + stroke_dim + Nclass # z | (x,y,p1,p2,p3) | (c1, c2, ... c_Nclass)
+output_dim = 6*M + 3
+
+
 class Decoder(nn.Module):
     def __init__(self):
         super(Decoder, self).__init__()
@@ -107,47 +113,111 @@ class Decoder(nn.Module):
         self.hidden_h = torch.zeros(batch_size,dec_hyper_dim,device=device)
         self.cell_h = torch.zeros(batch_size,dec_hyper_dim,device=device)
     
-    def forward(self, z, stroke, generate):
+    def dec_forward1(self, z, strokes, classifier = None):
+        params = [torch.zeros(Nmax,M,batch_size).to(device) for  _ in range(6)] + [torch.zeros(Nmax,batch_size,3).to(device)]
+        # used when loop goes beyond input sketch length
+        empty_stroke = torch.tensor([0,0,0,0,1]).to(torch.float32).to(device)
+        # For each timestep, pass the batch of strokes through LSTM and compute
+        # the output.  Output of the previous timestep is used as input.
+        for i in range(1,Nmax):
+            input = torch.cat((strokes[i-1],classifier),dim = 1)
+            x = torch.cat((input,z),dim = 1).view(1,batch_size,input_dim)
+            
+            (h,c,h_hat,c_hat) = self.lstm.cells[0](x.float().squeeze(), 
+                                    self.hidden.squeeze(), 
+                                    self.cell.squeeze(), 
+                                    self.hidden_h.squeeze(), 
+                                    self.cell_h.squeeze())
+            self.hidden = h.unsqueeze(0)
+            self.cell = c.unsqueeze(0)
+            self.hidden_h = h_hat.unsqueeze(0)
+            self.cell_h = c_hat.unsqueeze(0)    
+            
+            output = self.hidden[-1].unsqueeze(0)
+            with torch.device(device):
+                #params will be used for computing loss
+                param_list = distribution(self.fc_proj(output))
+                strokes[i] = sample(*param_list).to(device)
+                for j in range(7):
+                    params[j][i-1,:,:] = param_list[j].squeeze()
+            
+            stroke_mask = (strokes[i,:,4] == 1).to(device) # boolean mask set to true when p3 == 1
+            
+            strokes[i,stroke_mask.squeeze(),:] = empty_stroke
+            
+        return params
+    
+    def dec_forward2(self, z, strokes):
+        self.hidden, self.cell, self.hidden_h, self.cell_h = torch.split(
+            F.tanh(self.fc_in(z).unsqueeze(0)),
+            [dec_hidden_dim, dec_hidden_dim, dec_hyper_dim, dec_hyper_dim],
+            dim = 2)
+        out, (self.hidden, self.cell,self.hidden_h,self.cell_h) = self.lstm(strokes.float(),(self.hidden.contiguous(), 
+                                           self.cell.contiguous(),
+                                           self.hidden_h.contiguous(),
+                                           self.cell_h.contiguous()))
+        params = distribution(self.fc_proj(out))
+        return params
+    
+    def dec_forward3(self,z,strokes,classifier):
+        params = self.dec_forward2(z,strokes)
+        N_s = strokes.shape[0]
+        new_strokes = torch.zeros(N_s, batch_size, stroke_dim,device=device)
+        with torch.device(device):
+            for i in range(N_s):
+                new_strokes[i,:,:] = sample(*[j[i] for j in params])
+        
+        generated_strokes = [new_strokes[-1,:,:]]
+        i = 1
+        while True:
+            input = torch.cat((generated_strokes[i-1],classifier),dim = 1)
+            x = torch.cat((input,z),dim = 1).view(1,batch_size,input_dim)
+            
+            (h,c,h_hat,c_hat) = self.lstm.cells[0](x.float().squeeze(), 
+                                    self.hidden.squeeze(), 
+                                    self.cell.squeeze(), 
+                                    self.hidden_h.squeeze(), 
+                                    self.cell_h.squeeze())
+            self.hidden = h.unsqueeze(0)
+            self.cell = c.unsqueeze(0)
+            self.hidden_h = h_hat.unsqueeze(0)
+            self.cell_h = c_hat.unsqueeze(0)    
+            
+            output = self.hidden[-1].unsqueeze(0)
+            with torch.device(device):
+                #params will be used for computing loss
+                params = distribution(self.fc_proj(output))
+                generated_strokes.append(sample(*params).to(device))
+            
+            if generated_strokes[i][0,4].item() == 1 or i >= Nmax - N_s:
+                break
+            i = i + 1
+            
+        return torch.stack(generated_strokes[1:],dim = 0)
+    
+    
+    def forward(self, z, strokes, mode = 'train',classifier = None):
         """
         Parameters:
             z - Tensor of size  (batch_size, latent_dim), with latent vector samples.
 
             stroke - Tensor of size (batch_size, stroke dim); previous stroke
 
-
         Returns:
             Tensor of size (N_max, batch_size, stroke dim), as the next stroke
         """
         
-        if generate:
-            x = torch.cat((stroke,z),dim = 1).view(1,batch_size,input_dim)
-
-            out, (self.hidden, self.cell,self.hidden_h,self.cell_h) = self.lstm(x.float(),(self.hidden.contiguous(),
-                                                                                           self.cell.contiguous(),
-                                                                                           self.hidden_h.contiguous(),
-                                                                                           self.cell_h.contiguous()))
-
-            # Sample from output distribution. If temperature parameter is small,
-            # this becomes deterministic.
-            with torch.device(device):
-                params = distribution(self.fc_proj(out))
-                next = sample(*params).to(device)
-            return next, params
+        if mode == 'generate':
+            params = self.dec_forward1(z,strokes,classifier)
+            return params
         
-        else:
-            self.hidden, self.cell, self.hidden_h, self.cell_h = torch.split(
-                F.tanh(self.fc_in(z).unsqueeze(0)),
-                [dec_hidden_dim, dec_hidden_dim, dec_hyper_dim, dec_hyper_dim],
-                dim = 2)
-
-            out, _ = self.lstm(stroke.float(),(self.hidden.contiguous(), 
-                                               self.cell.contiguous(),
-                                               self.hidden_h.contiguous(),
-                                               self.cell_h.contiguous()))
-
-            params = distribution(self.fc_proj(out))
-
-        return params
+        elif mode == 'train':
+            params = self.dec_forward2(z,strokes)
+            return params
+            
+        elif mode == 'finish-sketch':
+            params
+        
 
 if __name__ == "__main__":
     print("Running tests...\n")

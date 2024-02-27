@@ -34,57 +34,16 @@ class VAE(nn.Module):
         # Data for all strokes in output sequence
         strokes = torch.zeros(Nmax + 1, batch_size, stroke_dim,device=device)
         strokes[0,:] = torch.tensor([0,0,1,0,0]).to(device)
-
-        if compute_loss:
-            mask, dx, dy, p = make_target(batch, lengths)
-            l_p = torch.zeros(1).to(device)
-            l_s = torch.zeros(1).to(device)
-        else:
-            l_p = 0
-            l_s = 0
         
-        # used when loop goes beyond input sketch length
-        empty_stroke = torch.tensor([0,0,0,0,1]).to(torch.float32).to(device)
         
-        # For each timestep, pass the batch of strokes through LSTM and compute
-        # the output.  Output of the previous timestep is used as input.
-        for i in range(1,Nmax):
-            input = torch.cat((strokes[i-1],classifier),dim = 1)
-            x = torch.cat((input,z),dim = 1).view(1,batch_size,input_dim)
-            
-            (h,c,h_hat,c_hat) = self.decoder.lstm.cells[0](x.float().squeeze(), 
-                                    self.decoder.hidden.squeeze(), 
-                                    self.decoder.cell.squeeze(), 
-                                    self.decoder.hidden_h.squeeze(), 
-                                    self.decoder.cell_h.squeeze())
-            
-            self.decoder.hidden = h.unsqueeze(0)
-            self.decoder.cell = c.unsqueeze(0)
-            self.decoder.hidden_h = h_hat.unsqueeze(0)
-            self.decoder.cell_h = c_hat.unsqueeze(0)    
-            
-            output = self.decoder.hidden[-1].unsqueeze(0)
-            with torch.device(device):
-                #params will be used for computing loss
-                params = distribution(self.decoder.fc_proj(output))
-                strokes[i] = sample(*params).to(device)
-            
-            if compute_loss:
-                # calculate loss at each timestep. params[6] is pen_state, 
-                # input_stroke is the input data
-                l_p += pen_reconstruction_loss(p[i],params[6])
-                offset_params = [params[i].view(M,batch_size) for i in range(6)]
-                l_s += offset_reconstruction_loss(
-                    dx[i],
-                    dy[i],
-                    *offset_params,
-                    mask[i]
-                )
+        params = self.decoder(z,strokes,'generate',classifier=classifier)
+                   
+        #mask, dx, dy, p = make_target(batch, lengths)
+        #offset_params = [params[i].squeeze().transpose(0, 1) for i in range(6)]
+        #l_p = pen_reconstruction_loss(p, params[6]) 
+        #l_s = offset_reconstruction_loss(dx, dy, *offset_params, mask[:-1])
                 
-            stroke_mask = (strokes[i,:,4] == 1).to(device) # boolean mask set to true when p3 == 1
-            strokes[i,stroke_mask.squeeze(),:] = empty_stroke
-            
-        return strokes[1:],l_s,l_p
+        return strokes[1:], params
 
     def run_decoder_train(self,batch,lengths,z):
 
@@ -97,14 +56,7 @@ class VAE(nn.Module):
         #generation mode in the decoder. 
         strokes = torch.cat([strokes,zs], 2)
 
-        params = self.decoder(z, strokes,self.generate)
-
-        mask, dx, dy, p = make_target(batch, lengths,Nmax)
-        
-        #compute loss
-        offset_params = [params[i].squeeze().transpose(0, 1) for i in range(6)]
-        l_p = pen_reconstruction_loss(p, params[6]) 
-        l_s = offset_reconstruction_loss(dx, dy, *offset_params, mask[:-1])
+        params = self.decoder(z, strokes,'train')
         
         output = torch.zeros(Nmax, batch_size, 5,device=device)
         with torch.device(device):
@@ -115,7 +67,23 @@ class VAE(nn.Module):
                 output[i,stroke_mask,:] = empty_stroke
                            
 
-        return output, l_s, l_p
+        return output, params
+    
+    def complete_sketch(self,input):
+        mean, logvar = self.encoder(input)
+        z = mean + torch.exp(logvar/2)*torch.randn(batch_size, latent_dim, device = device)
+        empty = torch.zeros(stroke_dim + Nclass)
+        empty[2] = 1
+        start_stroke = torch.stack([empty] * batch_size).unsqueeze(0).to(device)
+        strokes = torch.cat([start_stroke, input[:-1]], 0)
+        zs = torch.stack([z] * (input.shape[0]))
+        #IMPORTANT: Must always ensure that this is concatenated in the same order as the
+        #generation mode in the decoder. 
+        strokes = torch.cat([strokes,zs], 2)
+        
+        output = self.decoder.dec_forward3(z,strokes,classifier = input[0,:,5:].clone())
+        
+        return torch.cat((input[:,:,:5],output),dim = 0)
     
     def forward(self, batch, lengths, anneal_loss=True, step=0): 
         batch = batch.to(device)
@@ -129,9 +97,17 @@ class VAE(nn.Module):
         z = mean + std*random_sample
         
         if self.generate:
-            output, l_s, l_p = self.run_decoder_generate(batch,lengths,z,batch[0,:,5:].clone())
+            classifier = batch[0,:,5:].clone()
+            output, params = self.run_decoder_generate(batch,lengths,z,classifier)
         else:
-            output, l_s, l_p = self.run_decoder_train(batch,lengths,z)
+            output, params = self.run_decoder_train(batch,lengths,z)
+            
+        mask, dx, dy, p = make_target(batch, lengths)
+        
+        #compute loss
+        offset_params = [params[i].squeeze().transpose(0, 1) for i in range(6)]
+        l_p = pen_reconstruction_loss(p, params[6]) 
+        l_s = offset_reconstruction_loss(dx, dy, *offset_params, mask[:-1])
 
         l_r = l_p + l_s
         l_kl = kl_loss(mean, logvar)
