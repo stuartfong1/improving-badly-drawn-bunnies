@@ -7,7 +7,7 @@ stroke_dim = 5
 
 # decoder https://arxiv.org/pdf/1704.03477.pdf
 M = 20 # number of normal distributions for output 
-T = 1# temperature parameter
+T = 0.1 # temperature parameter
 # saves computation
 
 latent_dim = 128
@@ -81,12 +81,13 @@ def prune_data(data, num_std=2.5):
     print(f"Number of images after pruning: {np.size(data)}")
 
 
-for dataset in datasets:
-  prune_data(dataset["train"],1.5)
-  prune_data(dataset["test"],1.5)
+# for dataset in datasets:
+#   prune_data(dataset["train"],1.5)
+#   prune_data(dataset["test"],1.5)
 
-Nmax = max([
-  max([len(i) for i in dataset["train"]] + [len(i) for i in dataset["test"]]) 
-  for dataset in datasets
-  ])
+# Nmax = max([
+#   max([len(i) for i in dataset["train"]] + [len(i) for i in dataset["test"]]) 
+#   for dataset in datasets
+#   ])
 
+Nmax = 200
