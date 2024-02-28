@@ -35,7 +35,7 @@ def make_image(image):
     return batch, torch.tensor(length)
 
 def predict(model, batch, lengths):
-    batch = batch.squeeze(2).transpose(0, 1)
+    batch = batch.squeeze(2).transpose(0, 1).to(device)
     with torch.no_grad():
         mean, logvar = model.encoder(batch)
         z = mean + torch.exp(logvar/2)*torch.randn(2, 128, device = device) * T

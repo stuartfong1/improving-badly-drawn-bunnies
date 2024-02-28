@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def display(my_array):
-    my_array = np.array(my_array)
+    my_array = np.array(my_array.cpu())
     #Xplot and Yplot are array of points that will be plotted
     Xplot = []
     Yplot = []
@@ -22,3 +22,4 @@ def display(my_array):
             Yplot = []
         i+=1
     plt.show()
+    
