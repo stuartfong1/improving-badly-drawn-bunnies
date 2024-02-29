@@ -108,6 +108,9 @@ def display_encoded_image(image):
             Xplot.clear()
             Yplot.clear()
         # elif image[i, 4] == 1:
+    ax = plt.gca()
+    ax.set_aspect('equal', adjustable='box')
+    ax.axis('off')
     plt.show()
 
 
