@@ -1,10 +1,8 @@
 import numpy as np
 import torch
-from torch.optim import Adam
 
-from autoencoder import VAE
 from params import device, T
-from data_processing import load_weights, encode_dataset1
+from data_processing import encode_dataset1
 from display_data import display
 
 # Normalize data
@@ -71,19 +69,13 @@ def complete(model, batch, length):
         
         return torch.cat((batch[:,:,:5],output),dim = 0)
 
-def run_model(my_array, cls, mode='process'):
+def run_model(model, my_array, cls, mode='process'):
     my_array = normalize(my_array, cls)
     my_array = add_class(my_array, cls)
     batch, length = make_image(my_array)
     batch = batch.unsqueeze(0)
     batch = torch.cat([batch, batch], 0)
     length = torch.Tensor([length.item(), length.item()])
-
-    model = VAE().to(device)
-    optimizer = Adam(model.parameters()) 
-    load_weights(model,optimizer,"model/final/remote/fruit.pt") 
-
-    model.generate = True
 
     if mode == 'process':
         output = process(model, batch, length)[:, 0, :3]

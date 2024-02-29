@@ -3,9 +3,13 @@ from tkinter import Button, Canvas
 import numpy as np
 import math
 from rdp import rdp
+from torch.optim import Adam
 
 from demo_model import run_model
 from display_data import display
+from autoencoder import VAE
+from data_processing import load_weights
+from params import device
 
 #Epsilon for rdp
 scaling = 0.4
@@ -28,6 +32,13 @@ connector_line = True
 # Radio button variables
 options = ["Apple", "Flower", "Cactus", "Carrot"]
 sketch_class = tk.StringVar(value="Apple")
+
+# Load model
+model = VAE().to(device)
+optimizer = Adam(model.parameters()) 
+load_weights(model,optimizer,"model/final/remote/fruit.pt") 
+
+model.generate = True
 
 # Function to calculate distance between two points
 def calculate_distance(x1, y1, x2, y2):
@@ -124,7 +135,7 @@ def process_image():
     if len(simplified_array) > 200:
         raise_popup()
     else:
-        result = run_model(simplified_array, sketch_class.get(), mode='process')
+        result = run_model(model, simplified_array, sketch_class.get(), mode='process')
         display(result)
     
     # Clear the drawing data and the canvas for new drawings
@@ -147,7 +158,7 @@ def complete_image():
     if len(simplified_array) > 200:
         raise_popup()
     else:
-        result = run_model(simplified_array, sketch_class.get(), mode='complete')
+        result = run_model(model, simplified_array, sketch_class.get(), mode='complete')
         display(result)
 
     # Clear the drawing data and the canvas for new drawings
