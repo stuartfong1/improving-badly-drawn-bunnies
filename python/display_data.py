@@ -17,9 +17,12 @@ def display(my_array):
         Xplot.append(xpos)
         Yplot.append(-ypos)
         if my_array[i,2] == 1:
-            plt.plot(Xplot, Yplot,color='black')
+            plt.plot(Xplot, Yplot,color='black', linewidth=3)
             Xplot = []
             Yplot = []
         i+=1
+    ax = plt.gca()
+    ax.set_aspect('equal', adjustable='box')
+    ax.axis('off')
     plt.show()
     
