@@ -10,6 +10,7 @@ __pycache__/
 model/temp
 model/final/local
 data/local
+test_results
 
 # >:(
 .idea/

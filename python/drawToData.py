@@ -9,7 +9,9 @@ from demo_model import run_model
 from display_data import display
 from autoencoder import VAE
 from data_processing import load_weights
-from params import device
+from params import device, conditional
+
+conditional = False
 
 #Epsilon for rdp
 scaling = 0.4
@@ -36,7 +38,7 @@ sketch_class = tk.StringVar(value="Apple")
 # Load model
 model = VAE().to(device)
 optimizer = Adam(model.parameters()) 
-load_weights(model,optimizer,"model/final/remote/fruit.pt") 
+load_weights(model,optimizer,"model/final/local/fruit.pt") 
 
 model.generate = True
 

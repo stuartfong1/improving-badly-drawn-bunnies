@@ -30,4 +30,5 @@ n_min = 0.01  # Starting Value from paper
 R = 0.9999  # R is a term close to but less than 1.
 KL_min = 0.2 # Value from paper (needs to be between 0.1 and 0.5)
 
+conditional = True
 Nmax = 200
