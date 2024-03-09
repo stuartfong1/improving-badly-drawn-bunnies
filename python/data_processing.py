@@ -25,9 +25,6 @@ def encode_sketch(sketch,length,N,do_offset = True):
 
     shape = sketch.shape
     pen_up = (np.ones(shape[0]) - sketch[:,2]).reshape(shape[0],1)
-    category = np.zeros((shape[0],N))
-    
-    category[:,int(sketch[0][-1])] = 1
     
     end_stroke = np.zeros((shape[0],1))
     end_stroke[length:] = 1 
@@ -35,9 +32,15 @@ def encode_sketch(sketch,length,N,do_offset = True):
     sketch[:,2][length:] = 0
     sketch[-1][2] = 0
     
-    return np.concatenate((sketch[:,:-1],pen_up,end_stroke,category),axis=1)
+    if N > 0:
+        category = np.zeros((shape[0],N))
+        category[:,int(sketch[0][-1])] = 1
+        return np.concatenate((sketch[:,:-1],pen_up,end_stroke,category),axis=1)
+    else: 
+        return np.concatenate((sketch[:,:-1],pen_up,end_stroke),axis=1)
 
-def encode_dataset1(data,lengths,do_offset = True):
+
+def encode_dataset1(data,lengths,do_offset = True,N = Nclass):
     """
     Encode pen states by creating a new array of sketch data.
     
@@ -48,13 +51,12 @@ def encode_dataset1(data,lengths,do_offset = True):
         ndarray: object array containing encoded data for each sketch
     """
     # new_data = np.empty(data.size,dtype=object)
-    new_data = np.empty((data.shape[0], data.shape[1], stroke_dim+Nclass), dtype=object)
+    new_data = np.empty((data.shape[0], data.shape[1], stroke_dim+N), dtype=object)
 
     for i, sketch in enumerate(data):
-        new_data[i] = encode_sketch(sketch,lengths[i],Nclass,do_offset)
+        new_data[i] = encode_sketch(sketch,lengths[i],N,do_offset)
 
     return new_data
-
 
 def normalize_data(data):
 
@@ -144,8 +146,11 @@ def make_image(image):
     length = len(image)
     new_image = np.zeros((Nmax, 4))
     new_image[:len(image), :] = image[:len(image), :] # copy over values
-
-    encoded_strokes = np.stack(encode_dataset1(np.array([new_image]),[length]), 1) # don't forget to stack input along dim = 1
+    if conditional:
+        # don't forget to stack input along dim = 1
+        encoded_strokes = np.stack(encode_dataset1(np.array([new_image]),[length]), 1) 
+    else:
+        encoded_strokes = np.stack(encode_dataset1(np.array([new_image]),[length],N=0), 1) 
     batch = torch.from_numpy(encoded_strokes.astype(float))
     return batch, torch.tensor(length)
     

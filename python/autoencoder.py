@@ -14,6 +14,7 @@ class VAE(nn.Module):
         self.encoder = Encoder()
         self.decoder = Decoder()
         self.generate = False
+        
     
     def run_decoder_generate(self,batch,lengths,z,classifier,compute_loss = True):
         '''
@@ -81,7 +82,12 @@ class VAE(nn.Module):
         #generation mode in the decoder. 
         strokes = torch.cat([strokes,zs], 2)
         
-        output = self.decoder.dec_forward3(z,strokes,classifier = input[0,:,5:].clone())
+        if conditional:
+            classifier = input[0,:,5:].clone()
+        else:
+            classifier = None
+        
+        output = self.decoder.dec_forward3(z,strokes,classifier = classifier)
         
         return torch.cat((input[:,:,:5],output),dim = 0)
     
@@ -96,8 +102,12 @@ class VAE(nn.Module):
         std = torch.exp(logvar/2) # logvar / 2 should be a float
         z = mean + std*random_sample
         
-        if self.generate:
+        if conditional:
             classifier = batch[0,:,5:].clone()
+        else:
+            classifier = None
+        
+        if self.generate:
             output, params = self.run_decoder_generate(batch,lengths,z,classifier)
         else:
             output, params = self.run_decoder_train(batch,lengths,z)

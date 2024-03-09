@@ -7,7 +7,12 @@ from params import *
 class Encoder(nn.Module):
     def __init__(self):
         super(Encoder, self).__init__()
-        self.lstm = nn.LSTM(stroke_dim + Nclass, enc_hidden_dim, bidirectional=True)
+        if conditional:
+            self.input_dim = stroke_dim + Nclass
+        else:
+            self.input_dim = stroke_dim
+
+        self.lstm = nn.LSTM(self.input_dim, enc_hidden_dim, bidirectional=True)
 
         self.fc_mu = nn.Linear(2*enc_hidden_dim, latent_dim)
         self.fc_sigma = nn.Linear(2*enc_hidden_dim, latent_dim)
@@ -38,3 +43,4 @@ class Encoder(nn.Module):
         mu = self.fc_mu(hidden_concatenated)
         sigma = self.fc_sigma(hidden_concatenated)
         return mu, sigma
+

@@ -89,13 +89,17 @@ def sample(mixture_weights, mean_x, mean_y, std_x, std_y, corr_xy, pen_state):
 
 #DECODER..
 
-input_dim = latent_dim + stroke_dim + Nclass # z | (x,y,p1,p2,p3) | (c1, c2, ... c_Nclass)
 output_dim = 6*M + 3
-
 
 class Decoder(nn.Module):
     def __init__(self):
         super(Decoder, self).__init__()
+
+       # input dimension is z | (x,y,p1,p2,p3) | (c1, c2, ... c_Nclass)
+        if conditional:
+            self.input_dim = latent_dim + stroke_dim + Nclass
+        else:
+            self.input_dim = latent_dim + stroke_dim
 
         # generates initial hidden and cell states from latent vector
         self.fc_in = nn.Linear(latent_dim,2*dec_hidden_dim + 2*dec_hyper_dim)
@@ -105,7 +109,7 @@ class Decoder(nn.Module):
         self.fc_proj = nn.Linear(dec_hidden_dim,output_dim)
 
         # Input has dimension latent_dim + 5 for latent vector and initial stroke
-        self.lstm = HyperLSTM(input_dim,dec_hidden_dim,dec_hyper_dim,feature_dim,1)
+        self.lstm = HyperLSTM(self.input_dim,dec_hidden_dim,dec_hyper_dim,feature_dim,1)
 
         self.hidden = torch.zeros(batch_size,dec_hidden_dim,device=device)
         self.cell = torch.zeros(batch_size,dec_hidden_dim,device=device)
@@ -119,9 +123,13 @@ class Decoder(nn.Module):
         empty_stroke = torch.tensor([0,0,0,0,1]).to(torch.float32).to(device)
         # For each timestep, pass the batch of strokes through LSTM and compute
         # the output.  Output of the previous timestep is used as input.
-        for i in range(1,Nmax):
-            input = torch.cat((strokes[i-1],classifier),dim = 1)
-            x = torch.cat((input,z),dim = 1).view(1,batch_size,input_dim)
+        for i in range(1,Nmax+1):
+            if classifier == None:
+                input = strokes[i-1]
+            else:
+                input = torch.cat((strokes[i-1],classifier),dim = 1)
+            
+            x = torch.cat((input,z),dim = 1).view(1,batch_size,self.input_dim)
             
             (h,c,h_hat,c_hat) = self.lstm.cells[0](x.float().squeeze(), 
                                     self.hidden.squeeze(), 
@@ -170,8 +178,11 @@ class Decoder(nn.Module):
         generated_strokes = [new_strokes[-1,:,:]]
         i = 1
         while True:
-            input = torch.cat((generated_strokes[i-1],classifier),dim = 1)
-            x = torch.cat((input,z),dim = 1).view(1,batch_size,input_dim)
+            if classifier == None:
+                input = generated_strokes[i-1]
+            else:
+                input = torch.cat((generated_strokes[i-1],classifier),dim = 1)
+            x = torch.cat((input,z),dim = 1).view(1,batch_size,self.input_dim)
             
             (h,c,h_hat,c_hat) = self.lstm.cells[0](x.float().squeeze(), 
                                     self.hidden.squeeze(), 
@@ -217,6 +228,7 @@ class Decoder(nn.Module):
             
         elif mode == 'finish-sketch':
             params
+        
         
 
 if __name__ == "__main__":
