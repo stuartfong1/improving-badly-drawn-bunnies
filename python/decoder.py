@@ -29,12 +29,12 @@ def gaussian_mixture_model(mixture_weights, mean_x, mean_y, std_x, std_y, corr_x
     
     # Sample from bivariate normal distribution i
     rand_x, rand_y = torch.randn(batch_size), torch.randn(batch_size)
-    
-    mean_x = torch.take(mean_x, i)
-    mean_y = torch.take(mean_y, i)
-    std_x = torch.take(std_x, i)
-    std_y = torch.take(std_y, i)
-    corr_xy = torch.take(corr_xy, i)
+
+    mean_x = torch.gather(mean_x.squeeze(), 0, i.unsqueeze(0)).squeeze()
+    mean_y = torch.gather(mean_y.squeeze(), 0, i.unsqueeze(0)).squeeze()
+    std_x = torch.gather(std_x.squeeze(), 0, i.unsqueeze(0)).squeeze()
+    std_y = torch.gather(std_y.squeeze(), 0, i.unsqueeze(0)).squeeze()
+    corr_xy = torch.gather(corr_xy.squeeze(), 0, i.unsqueeze(0)).squeeze()
     
     # Alternatively torch.distributions.multivariate_normal.MultivariateNormal?
     offset_x = mean_x + std_x * rand_x
