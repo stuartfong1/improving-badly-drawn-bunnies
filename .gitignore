@@ -11,6 +11,7 @@ model/temp
 model/final/local
 data/local
 test_results
+test_results1
 
 # >:(
 .idea/
